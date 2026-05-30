@@ -1,0 +1,53 @@
+version: "3"
+
+tasks:
+  generate:
+    desc: Generate Go code from templ templates
+    cmds:
+      - templ generate
+
+  generate-watch:
+    desc: Run templ generation with proxy reload
+    cmds:
+      - templ generate --watch --proxy="http://localhost:8090" --cmd="go run ./cmd/server" --open-browser=false
+
+  css:
+    desc: Build Tailwind CSS
+    cmds:
+      - |
+        TEMPLUI_PATH="$(go list -mod=mod -m -json github.com/templui/templui | awk -F'"' '/"Dir":/ {print $4; exit}')"
+        printf '%s\n' \
+          '@source "../../internal/**/*.templ";' \
+          '@source "../../cmd/**/*.go";' \
+          "@source \"$TEMPLUI_PATH/components/**/*.templ\";" \
+          > ./assets/css/sources.generated.css
+        tailwindcss -i ./assets/css/input.css -o ./assets/css/output.css
+
+  css-watch:
+    desc: Watch Tailwind CSS
+    cmds:
+      - |
+        TEMPLUI_PATH="$(go list -mod=mod -m -json github.com/templui/templui | awk -F'"' '/"Dir":/ {print $4; exit}')"
+        printf '%s\n' \
+          '@source "../../internal/**/*.templ";' \
+          '@source "../../cmd/**/*.go";' \
+          "@source \"$TEMPLUI_PATH/components/**/*.templ\";" \
+          > ./assets/css/sources.generated.css
+        tailwindcss -i ./assets/css/input.css -o ./assets/css/output.css --watch
+
+  check:
+    desc: Generate templates, build CSS, and compile Go packages
+    cmds:
+      - task: generate
+      - task: css
+      - go test ./...
+
+  dev:
+    desc: Start the SSR app with templ and Tailwind watchers
+    cmds:
+      - task --parallel css-watch generate-watch
+
+  run:
+    desc: Start the SSR server
+    cmds:
+      - go run ./cmd/server

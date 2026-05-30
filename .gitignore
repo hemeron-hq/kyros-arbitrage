@@ -1,0 +1,7 @@
+tmp/
+*.out
+/kyros-arbitrage
+assets/css/sources.generated.css
+.env
+
+/docs
