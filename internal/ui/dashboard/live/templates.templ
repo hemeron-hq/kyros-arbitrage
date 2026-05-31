@@ -74,6 +74,9 @@ templ FeedCard(rows []FeedRow, lastUpdated string) {
 										<div class="min-w-0">
 											<div class="truncate font-medium">{ row.Exchange }</div>
 											<div class="truncate text-xs text-muted-foreground">{ row.Status }</div>
+											if row.Message != "" && row.Status != "live" {
+												<div class="mt-0.5 max-w-[8rem] truncate font-mono text-[0.68rem] text-muted-foreground" title={ row.Message }>{ row.Message }</div>
+											}
 										</div>
 									</div>
 								}
@@ -131,10 +134,10 @@ templ OpportunityCard(rows []OpportunityRow) {
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
 			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
-				@table.Table(table.Props{Class: "min-w-[860px] table-fixed"}) {
+				@table.Table(table.Props{Class: "min-w-[980px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
-							@table.Head(table.HeadProps{Class: "w-[210px]"}) {
+							@table.Head(table.HeadProps{Class: "w-[220px]"}) {
 								Route / market
 							}
 							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
@@ -143,8 +146,8 @@ templ OpportunityCard(rows []OpportunityRow) {
 							@table.Head(table.HeadProps{Class: "w-[150px]"}) {
 								Gross / net
 							}
-							@table.Head(table.HeadProps{Class: "w-[210px]"}) {
-								Costs
+							@table.Head(table.HeadProps{Class: "w-[310px]"}) {
+								Hurdle / costs
 							}
 							@table.Head(table.HeadProps{Class: "w-[170px]"}) {
 								Decision / reason
@@ -157,6 +160,7 @@ templ OpportunityCard(rows []OpportunityRow) {
 								@table.Cell(table.CellProps{Class: "align-top"}) {
 									<div class="min-w-0">
 										<span class="block truncate font-medium">{ row.Route }</span>
+										<span class="block whitespace-nowrap font-mono text-xs text-muted-foreground">{ row.Style }</span>
 										<span class="block whitespace-nowrap font-mono text-xs text-muted-foreground">{ row.Market }</span>
 									</div>
 								}
@@ -171,11 +175,15 @@ templ OpportunityCard(rows []OpportunityRow) {
 									</div>
 								}
 								@table.Cell(table.CellProps{Class: "align-top"}) {
-									<div title={ row.CostStack } class="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs tabular-nums">
+									<div title={ row.CostStack } class="grid grid-cols-3 gap-x-3 gap-y-1 font-mono text-xs tabular-nums">
+										<span class="whitespace-nowrap text-muted-foreground">hurdle <span class="text-foreground">{ row.FeeHurdle }</span></span>
+										<span class="whitespace-nowrap text-muted-foreground">edge <span class="text-foreground">{ row.EdgeAfterFees }</span></span>
+										<span class="whitespace-nowrap text-muted-foreground">miss <span class="text-foreground">{ row.Missing }</span></span>
 										<span class="whitespace-nowrap text-muted-foreground">fees <span class="text-foreground">{ row.Fees }</span></span>
 										<span class="whitespace-nowrap text-muted-foreground">slip <span class="text-foreground">{ row.Slippage }</span></span>
 										<span class="whitespace-nowrap text-muted-foreground">lat <span class="text-foreground">{ row.Latency }</span></span>
 										<span class="whitespace-nowrap text-muted-foreground">reb <span class="text-foreground">{ row.Rebalance }</span></span>
+										<span class="whitespace-nowrap text-muted-foreground">exposure <span class="text-foreground">{ row.RebalanceExposure }</span></span>
 									</div>
 								}
 								@table.Cell(table.CellProps{Class: "align-top"}) {

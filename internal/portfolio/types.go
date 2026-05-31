@@ -16,20 +16,23 @@ type BalanceRow struct {
 }
 
 type Execution struct {
-	ID             string
-	Market         exchange.Market
-	BuyExchange    exchange.ID
-	SellExchange   exchange.ID
-	BaseSize       decimal.Decimal
-	BuyNotional    decimal.Decimal
-	SellNotional   decimal.Decimal
-	BuyFee         decimal.Decimal
-	SellFee        decimal.Decimal
-	LatencyPenalty decimal.Decimal
-	RebalanceCost  decimal.Decimal
-	NetProfit      decimal.Decimal
-	TermsSource    terms.Source
-	ExecutedAt     time.Time
+	ID                string
+	Market            exchange.Market
+	BuyExchange       exchange.ID
+	SellExchange      exchange.ID
+	BuyLiquidity      string
+	SellLiquidity     string
+	BaseSize          decimal.Decimal
+	BuyNotional       decimal.Decimal
+	SellNotional      decimal.Decimal
+	BuyFee            decimal.Decimal
+	SellFee           decimal.Decimal
+	LatencyPenalty    decimal.Decimal
+	RebalanceCost     decimal.Decimal
+	RebalanceExposure decimal.Decimal
+	NetProfit         decimal.Decimal
+	TermsSource       terms.Source
+	ExecutedAt        time.Time
 }
 
 type Stats struct {

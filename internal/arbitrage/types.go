@@ -17,13 +17,22 @@ const (
 	DecisionWait    Decision = "wait"
 )
 
+type LiquidityRole string
+
+const (
+	LiquidityMaker LiquidityRole = "maker"
+	LiquidityTaker LiquidityRole = "taker"
+)
+
 const (
 	ReasonExecuted            = "EXECUTED"
 	ReasonWaitingLatencyModel = "WAITING_LATENCY_MODEL"
+	ReasonWaitingMakerConfirm = "WAITING_MAKER_CONFIRM"
 	ReasonWaitingNewBook      = "WAITING_NEW_BOOK"
 	ReasonNoGrossEdge         = "SKIP_NO_GROSS_EDGE"
 	ReasonTermsStale          = "SKIP_TERMS_STALE"
 	ReasonBelowMarketMinimum  = "SKIP_BELOW_MARKET_MIN"
+	ReasonBelowMakerBuffer    = "SKIP_BELOW_MAKER_BUFFER"
 	ReasonInsufficientBalance = "SKIP_INSUFFICIENT_BALANCE"
 	ReasonNegativeNet         = "SKIP_NEGATIVE_NET"
 	ReasonLedgerApplyFailed   = "SKIP_LEDGER_APPLY_FAILED"
@@ -37,6 +46,8 @@ type Opportunity struct {
 	Market            exchange.Market
 	BuyExchange       exchange.ID
 	SellExchange      exchange.ID
+	BuyLiquidity      LiquidityRole
+	SellLiquidity     LiquidityRole
 	BaseSize          decimal.Decimal
 	BuyNotional       decimal.Decimal
 	SellNotional      decimal.Decimal
@@ -51,6 +62,10 @@ type Opportunity struct {
 	LatencyPenalty    decimal.Decimal
 	LatencyPenaltyBPS decimal.Decimal
 	RebalanceCost     decimal.Decimal
+	RebalanceExposure decimal.Decimal
+	FeeHurdleBPS      decimal.Decimal
+	EdgeAfterFeesBPS  decimal.Decimal
+	MissingBPS        decimal.Decimal
 	ExpectedNetProfit decimal.Decimal
 	ExpectedNetBPS    decimal.Decimal
 	Decision          Decision

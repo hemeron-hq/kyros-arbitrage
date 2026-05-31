@@ -5,6 +5,8 @@ INSERT OR IGNORE INTO opportunities (
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -19,13 +21,17 @@ INSERT OR IGNORE INTO opportunities (
   latency_penalty,
   latency_penalty_bps,
   rebalance_cost,
+  rebalance_exposure,
+  fee_hurdle_bps,
+  edge_after_fees_bps,
+  missing_bps,
   expected_net_profit,
   expected_net_bps,
   decision,
   reason_code,
   terms_source,
   partial
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: InsertExecution :exec
 INSERT OR IGNORE INTO executions (
@@ -34,6 +40,8 @@ INSERT OR IGNORE INTO executions (
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -41,9 +49,10 @@ INSERT OR IGNORE INTO executions (
   sell_fee,
   latency_penalty,
   rebalance_cost,
+  rebalance_exposure,
   net_profit,
   terms_source
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListRecentOpportunities :many
 SELECT
@@ -52,6 +61,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -66,6 +77,10 @@ SELECT
   latency_penalty,
   latency_penalty_bps,
   rebalance_cost,
+  rebalance_exposure,
+  fee_hurdle_bps,
+  edge_after_fees_bps,
+  missing_bps,
   expected_net_profit,
   expected_net_bps,
   decision,
@@ -83,6 +98,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -97,6 +114,10 @@ SELECT
   latency_penalty,
   latency_penalty_bps,
   rebalance_cost,
+  rebalance_exposure,
+  fee_hurdle_bps,
+  edge_after_fees_bps,
+  missing_bps,
   expected_net_profit,
   expected_net_bps,
   decision,
@@ -114,6 +135,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -121,6 +144,7 @@ SELECT
   sell_fee,
   latency_penalty,
   rebalance_cost,
+  rebalance_exposure,
   net_profit,
   terms_source
 FROM executions
@@ -134,6 +158,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -141,6 +167,7 @@ SELECT
   sell_fee,
   latency_penalty,
   rebalance_cost,
+  rebalance_exposure,
   net_profit,
   terms_source
 FROM executions

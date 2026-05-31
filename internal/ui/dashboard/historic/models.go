@@ -23,6 +23,7 @@ type OpportunityRow struct {
 	Observed          string
 	ObservedFull      string
 	Route             string
+	Style             string
 	Market            string
 	Size              string
 	BuyNotional       string
@@ -33,6 +34,10 @@ type OpportunityRow struct {
 	SlippageCost      string
 	LatencyPenalty    string
 	RebalanceCost     string
+	RebalanceExposure string
+	FeeHurdleBPS      string
+	EdgeAfterFeesBPS  string
+	MissingBPS        string
 	ExpectedNetProfit string
 	ExpectedNetBPS    string
 	Decision          string
@@ -41,17 +46,19 @@ type OpportunityRow struct {
 }
 
 type ExecutionRow struct {
-	Executed       string
-	ExecutedFull   string
-	Route          string
-	Market         string
-	Size           string
-	BuyNotional    string
-	SellNotional   string
-	BuyFee         string
-	SellFee        string
-	LatencyPenalty string
-	RebalanceCost  string
-	NetProfit      string
-	TermsSource    string
+	Executed          string
+	ExecutedFull      string
+	Route             string
+	Style             string
+	Market            string
+	Size              string
+	BuyNotional       string
+	SellNotional      string
+	BuyFee            string
+	SellFee           string
+	LatencyPenalty    string
+	RebalanceCost     string
+	RebalanceExposure string
+	NetProfit         string
+	TermsSource       string
 }

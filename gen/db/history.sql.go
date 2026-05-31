@@ -38,6 +38,8 @@ INSERT OR IGNORE INTO executions (
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -45,26 +47,30 @@ INSERT OR IGNORE INTO executions (
   sell_fee,
   latency_penalty,
   rebalance_cost,
+  rebalance_exposure,
   net_profit,
   terms_source
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertExecutionParams struct {
-	OpportunityID  string `json:"opportunity_id"`
-	ExecutedAt     string `json:"executed_at"`
-	Market         string `json:"market"`
-	BuyExchange    string `json:"buy_exchange"`
-	SellExchange   string `json:"sell_exchange"`
-	BaseSize       string `json:"base_size"`
-	BuyNotional    string `json:"buy_notional"`
-	SellNotional   string `json:"sell_notional"`
-	BuyFee         string `json:"buy_fee"`
-	SellFee        string `json:"sell_fee"`
-	LatencyPenalty string `json:"latency_penalty"`
-	RebalanceCost  string `json:"rebalance_cost"`
-	NetProfit      string `json:"net_profit"`
-	TermsSource    string `json:"terms_source"`
+	OpportunityID     string `json:"opportunity_id"`
+	ExecutedAt        string `json:"executed_at"`
+	Market            string `json:"market"`
+	BuyExchange       string `json:"buy_exchange"`
+	SellExchange      string `json:"sell_exchange"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
+	BaseSize          string `json:"base_size"`
+	BuyNotional       string `json:"buy_notional"`
+	SellNotional      string `json:"sell_notional"`
+	BuyFee            string `json:"buy_fee"`
+	SellFee           string `json:"sell_fee"`
+	LatencyPenalty    string `json:"latency_penalty"`
+	RebalanceCost     string `json:"rebalance_cost"`
+	RebalanceExposure string `json:"rebalance_exposure"`
+	NetProfit         string `json:"net_profit"`
+	TermsSource       string `json:"terms_source"`
 }
 
 func (q *Queries) InsertExecution(ctx context.Context, arg InsertExecutionParams) error {
@@ -74,6 +80,8 @@ func (q *Queries) InsertExecution(ctx context.Context, arg InsertExecutionParams
 		arg.Market,
 		arg.BuyExchange,
 		arg.SellExchange,
+		arg.BuyLiquidity,
+		arg.SellLiquidity,
 		arg.BaseSize,
 		arg.BuyNotional,
 		arg.SellNotional,
@@ -81,6 +89,7 @@ func (q *Queries) InsertExecution(ctx context.Context, arg InsertExecutionParams
 		arg.SellFee,
 		arg.LatencyPenalty,
 		arg.RebalanceCost,
+		arg.RebalanceExposure,
 		arg.NetProfit,
 		arg.TermsSource,
 	)
@@ -94,6 +103,8 @@ INSERT OR IGNORE INTO opportunities (
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -108,13 +119,17 @@ INSERT OR IGNORE INTO opportunities (
   latency_penalty,
   latency_penalty_bps,
   rebalance_cost,
+  rebalance_exposure,
+  fee_hurdle_bps,
+  edge_after_fees_bps,
+  missing_bps,
   expected_net_profit,
   expected_net_bps,
   decision,
   reason_code,
   terms_source,
   partial
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertOpportunityParams struct {
@@ -123,6 +138,8 @@ type InsertOpportunityParams struct {
 	Market            string `json:"market"`
 	BuyExchange       string `json:"buy_exchange"`
 	SellExchange      string `json:"sell_exchange"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
 	BaseSize          string `json:"base_size"`
 	BuyNotional       string `json:"buy_notional"`
 	SellNotional      string `json:"sell_notional"`
@@ -137,6 +154,10 @@ type InsertOpportunityParams struct {
 	LatencyPenalty    string `json:"latency_penalty"`
 	LatencyPenaltyBps string `json:"latency_penalty_bps"`
 	RebalanceCost     string `json:"rebalance_cost"`
+	RebalanceExposure string `json:"rebalance_exposure"`
+	FeeHurdleBps      string `json:"fee_hurdle_bps"`
+	EdgeAfterFeesBps  string `json:"edge_after_fees_bps"`
+	MissingBps        string `json:"missing_bps"`
 	ExpectedNetProfit string `json:"expected_net_profit"`
 	ExpectedNetBps    string `json:"expected_net_bps"`
 	Decision          string `json:"decision"`
@@ -152,6 +173,8 @@ func (q *Queries) InsertOpportunity(ctx context.Context, arg InsertOpportunityPa
 		arg.Market,
 		arg.BuyExchange,
 		arg.SellExchange,
+		arg.BuyLiquidity,
+		arg.SellLiquidity,
 		arg.BaseSize,
 		arg.BuyNotional,
 		arg.SellNotional,
@@ -166,6 +189,10 @@ func (q *Queries) InsertOpportunity(ctx context.Context, arg InsertOpportunityPa
 		arg.LatencyPenalty,
 		arg.LatencyPenaltyBps,
 		arg.RebalanceCost,
+		arg.RebalanceExposure,
+		arg.FeeHurdleBps,
+		arg.EdgeAfterFeesBps,
+		arg.MissingBps,
 		arg.ExpectedNetProfit,
 		arg.ExpectedNetBps,
 		arg.Decision,
@@ -210,6 +237,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -217,6 +246,7 @@ SELECT
   sell_fee,
   latency_penalty,
   rebalance_cost,
+  rebalance_exposure,
   net_profit,
   terms_source
 FROM executions
@@ -230,20 +260,23 @@ type ListExecutionsPageParams struct {
 }
 
 type ListExecutionsPageRow struct {
-	OpportunityID  string `json:"opportunity_id"`
-	ExecutedAt     string `json:"executed_at"`
-	Market         string `json:"market"`
-	BuyExchange    string `json:"buy_exchange"`
-	SellExchange   string `json:"sell_exchange"`
-	BaseSize       string `json:"base_size"`
-	BuyNotional    string `json:"buy_notional"`
-	SellNotional   string `json:"sell_notional"`
-	BuyFee         string `json:"buy_fee"`
-	SellFee        string `json:"sell_fee"`
-	LatencyPenalty string `json:"latency_penalty"`
-	RebalanceCost  string `json:"rebalance_cost"`
-	NetProfit      string `json:"net_profit"`
-	TermsSource    string `json:"terms_source"`
+	OpportunityID     string `json:"opportunity_id"`
+	ExecutedAt        string `json:"executed_at"`
+	Market            string `json:"market"`
+	BuyExchange       string `json:"buy_exchange"`
+	SellExchange      string `json:"sell_exchange"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
+	BaseSize          string `json:"base_size"`
+	BuyNotional       string `json:"buy_notional"`
+	SellNotional      string `json:"sell_notional"`
+	BuyFee            string `json:"buy_fee"`
+	SellFee           string `json:"sell_fee"`
+	LatencyPenalty    string `json:"latency_penalty"`
+	RebalanceCost     string `json:"rebalance_cost"`
+	RebalanceExposure string `json:"rebalance_exposure"`
+	NetProfit         string `json:"net_profit"`
+	TermsSource       string `json:"terms_source"`
 }
 
 func (q *Queries) ListExecutionsPage(ctx context.Context, arg ListExecutionsPageParams) ([]ListExecutionsPageRow, error) {
@@ -261,6 +294,8 @@ func (q *Queries) ListExecutionsPage(ctx context.Context, arg ListExecutionsPage
 			&i.Market,
 			&i.BuyExchange,
 			&i.SellExchange,
+			&i.BuyLiquidity,
+			&i.SellLiquidity,
 			&i.BaseSize,
 			&i.BuyNotional,
 			&i.SellNotional,
@@ -268,6 +303,7 @@ func (q *Queries) ListExecutionsPage(ctx context.Context, arg ListExecutionsPage
 			&i.SellFee,
 			&i.LatencyPenalty,
 			&i.RebalanceCost,
+			&i.RebalanceExposure,
 			&i.NetProfit,
 			&i.TermsSource,
 		); err != nil {
@@ -291,6 +327,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -305,6 +343,10 @@ SELECT
   latency_penalty,
   latency_penalty_bps,
   rebalance_cost,
+  rebalance_exposure,
+  fee_hurdle_bps,
+  edge_after_fees_bps,
+  missing_bps,
   expected_net_profit,
   expected_net_bps,
   decision,
@@ -327,6 +369,8 @@ type ListOpportunitiesPageRow struct {
 	Market            string `json:"market"`
 	BuyExchange       string `json:"buy_exchange"`
 	SellExchange      string `json:"sell_exchange"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
 	BaseSize          string `json:"base_size"`
 	BuyNotional       string `json:"buy_notional"`
 	SellNotional      string `json:"sell_notional"`
@@ -341,6 +385,10 @@ type ListOpportunitiesPageRow struct {
 	LatencyPenalty    string `json:"latency_penalty"`
 	LatencyPenaltyBps string `json:"latency_penalty_bps"`
 	RebalanceCost     string `json:"rebalance_cost"`
+	RebalanceExposure string `json:"rebalance_exposure"`
+	FeeHurdleBps      string `json:"fee_hurdle_bps"`
+	EdgeAfterFeesBps  string `json:"edge_after_fees_bps"`
+	MissingBps        string `json:"missing_bps"`
 	ExpectedNetProfit string `json:"expected_net_profit"`
 	ExpectedNetBps    string `json:"expected_net_bps"`
 	Decision          string `json:"decision"`
@@ -364,6 +412,8 @@ func (q *Queries) ListOpportunitiesPage(ctx context.Context, arg ListOpportuniti
 			&i.Market,
 			&i.BuyExchange,
 			&i.SellExchange,
+			&i.BuyLiquidity,
+			&i.SellLiquidity,
 			&i.BaseSize,
 			&i.BuyNotional,
 			&i.SellNotional,
@@ -378,6 +428,10 @@ func (q *Queries) ListOpportunitiesPage(ctx context.Context, arg ListOpportuniti
 			&i.LatencyPenalty,
 			&i.LatencyPenaltyBps,
 			&i.RebalanceCost,
+			&i.RebalanceExposure,
+			&i.FeeHurdleBps,
+			&i.EdgeAfterFeesBps,
+			&i.MissingBps,
 			&i.ExpectedNetProfit,
 			&i.ExpectedNetBps,
 			&i.Decision,
@@ -405,6 +459,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -412,6 +468,7 @@ SELECT
   sell_fee,
   latency_penalty,
   rebalance_cost,
+  rebalance_exposure,
   net_profit,
   terms_source
 FROM executions
@@ -420,20 +477,23 @@ LIMIT ?
 `
 
 type ListRecentExecutionsRow struct {
-	OpportunityID  string `json:"opportunity_id"`
-	ExecutedAt     string `json:"executed_at"`
-	Market         string `json:"market"`
-	BuyExchange    string `json:"buy_exchange"`
-	SellExchange   string `json:"sell_exchange"`
-	BaseSize       string `json:"base_size"`
-	BuyNotional    string `json:"buy_notional"`
-	SellNotional   string `json:"sell_notional"`
-	BuyFee         string `json:"buy_fee"`
-	SellFee        string `json:"sell_fee"`
-	LatencyPenalty string `json:"latency_penalty"`
-	RebalanceCost  string `json:"rebalance_cost"`
-	NetProfit      string `json:"net_profit"`
-	TermsSource    string `json:"terms_source"`
+	OpportunityID     string `json:"opportunity_id"`
+	ExecutedAt        string `json:"executed_at"`
+	Market            string `json:"market"`
+	BuyExchange       string `json:"buy_exchange"`
+	SellExchange      string `json:"sell_exchange"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
+	BaseSize          string `json:"base_size"`
+	BuyNotional       string `json:"buy_notional"`
+	SellNotional      string `json:"sell_notional"`
+	BuyFee            string `json:"buy_fee"`
+	SellFee           string `json:"sell_fee"`
+	LatencyPenalty    string `json:"latency_penalty"`
+	RebalanceCost     string `json:"rebalance_cost"`
+	RebalanceExposure string `json:"rebalance_exposure"`
+	NetProfit         string `json:"net_profit"`
+	TermsSource       string `json:"terms_source"`
 }
 
 func (q *Queries) ListRecentExecutions(ctx context.Context, limit int64) ([]ListRecentExecutionsRow, error) {
@@ -451,6 +511,8 @@ func (q *Queries) ListRecentExecutions(ctx context.Context, limit int64) ([]List
 			&i.Market,
 			&i.BuyExchange,
 			&i.SellExchange,
+			&i.BuyLiquidity,
+			&i.SellLiquidity,
 			&i.BaseSize,
 			&i.BuyNotional,
 			&i.SellNotional,
@@ -458,6 +520,7 @@ func (q *Queries) ListRecentExecutions(ctx context.Context, limit int64) ([]List
 			&i.SellFee,
 			&i.LatencyPenalty,
 			&i.RebalanceCost,
+			&i.RebalanceExposure,
 			&i.NetProfit,
 			&i.TermsSource,
 		); err != nil {
@@ -481,6 +544,8 @@ SELECT
   market,
   buy_exchange,
   sell_exchange,
+  buy_liquidity,
+  sell_liquidity,
   base_size,
   buy_notional,
   sell_notional,
@@ -495,6 +560,10 @@ SELECT
   latency_penalty,
   latency_penalty_bps,
   rebalance_cost,
+  rebalance_exposure,
+  fee_hurdle_bps,
+  edge_after_fees_bps,
+  missing_bps,
   expected_net_profit,
   expected_net_bps,
   decision,
@@ -512,6 +581,8 @@ type ListRecentOpportunitiesRow struct {
 	Market            string `json:"market"`
 	BuyExchange       string `json:"buy_exchange"`
 	SellExchange      string `json:"sell_exchange"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
 	BaseSize          string `json:"base_size"`
 	BuyNotional       string `json:"buy_notional"`
 	SellNotional      string `json:"sell_notional"`
@@ -526,6 +597,10 @@ type ListRecentOpportunitiesRow struct {
 	LatencyPenalty    string `json:"latency_penalty"`
 	LatencyPenaltyBps string `json:"latency_penalty_bps"`
 	RebalanceCost     string `json:"rebalance_cost"`
+	RebalanceExposure string `json:"rebalance_exposure"`
+	FeeHurdleBps      string `json:"fee_hurdle_bps"`
+	EdgeAfterFeesBps  string `json:"edge_after_fees_bps"`
+	MissingBps        string `json:"missing_bps"`
 	ExpectedNetProfit string `json:"expected_net_profit"`
 	ExpectedNetBps    string `json:"expected_net_bps"`
 	Decision          string `json:"decision"`
@@ -549,6 +624,8 @@ func (q *Queries) ListRecentOpportunities(ctx context.Context, limit int64) ([]L
 			&i.Market,
 			&i.BuyExchange,
 			&i.SellExchange,
+			&i.BuyLiquidity,
+			&i.SellLiquidity,
 			&i.BaseSize,
 			&i.BuyNotional,
 			&i.SellNotional,
@@ -563,6 +640,10 @@ func (q *Queries) ListRecentOpportunities(ctx context.Context, limit int64) ([]L
 			&i.LatencyPenalty,
 			&i.LatencyPenaltyBps,
 			&i.RebalanceCost,
+			&i.RebalanceExposure,
+			&i.FeeHurdleBps,
+			&i.EdgeAfterFeesBps,
+			&i.MissingBps,
 			&i.ExpectedNetProfit,
 			&i.ExpectedNetBps,
 			&i.Decision,

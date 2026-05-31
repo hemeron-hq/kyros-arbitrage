@@ -40,6 +40,7 @@ type Server struct {
 	metricsCollector     *appmetrics.Collector
 	database             *database.Database
 	historyStore         *history.Store
+	historyRecorder      *historyRecorder
 	disableMarketService bool
 }
 
@@ -87,6 +88,7 @@ func New(cfg config.Config, opts ...Option) (*http.Server, error) {
 		metricsCollector: metricsCollector,
 		database:         appDatabase,
 		historyStore:     historyStore,
+		historyRecorder:  newHistoryRecorder(historyStore),
 	}
 	app.decisionEngine = arbitrage.NewEngine(app.termsStore, app.ledger, app.riskController)
 	for _, opt := range opts {
@@ -111,6 +113,7 @@ func New(cfg config.Config, opts ...Option) (*http.Server, error) {
 		)
 		service.Start(ctx)
 	}
+	go app.historyRecorder.run(ctx)
 	go app.runDecisionLoop(ctx)
 
 	httpServer := &http.Server{
@@ -133,7 +136,7 @@ func (s *Server) runDecisionLoop(ctx context.Context) {
 		snapshots := s.marketStore.Snapshot()
 		startedAt := time.Now()
 		snapshot := s.decisionEngine.Evaluate(snapshots, now)
-		_ = s.historyStore.RecordSnapshot(ctx, snapshot)
+		s.historyRecorder.observe(snapshot)
 		s.metricsCollector.ObserveDecision(newestBookTime(snapshots), startedAt, time.Now())
 	}
 	evaluate(time.Now())

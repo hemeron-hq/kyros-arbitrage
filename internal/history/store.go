@@ -55,6 +55,8 @@ type Opportunity struct {
 	Market            string `json:"market"`
 	BuyExchange       string `json:"buyExchange"`
 	SellExchange      string `json:"sellExchange"`
+	BuyLiquidity      string `json:"buyLiquidity"`
+	SellLiquidity     string `json:"sellLiquidity"`
 	BaseSize          string `json:"baseSize"`
 	BuyNotional       string `json:"buyNotional"`
 	SellNotional      string `json:"sellNotional"`
@@ -69,6 +71,10 @@ type Opportunity struct {
 	LatencyPenalty    string `json:"latencyPenalty"`
 	LatencyPenaltyBPS string `json:"latencyPenaltyBps"`
 	RebalanceCost     string `json:"rebalanceCost"`
+	RebalanceExposure string `json:"rebalanceExposure"`
+	FeeHurdleBPS      string `json:"feeHurdleBps"`
+	EdgeAfterFeesBPS  string `json:"edgeAfterFeesBps"`
+	MissingBPS        string `json:"missingBps"`
 	ExpectedNetProfit string `json:"expectedNetProfit"`
 	ExpectedNetBPS    string `json:"expectedNetBps"`
 	Decision          string `json:"decision"`
@@ -78,20 +84,23 @@ type Opportunity struct {
 }
 
 type Execution struct {
-	ID             string `json:"id"`
-	ExecutedAt     string `json:"executedAt"`
-	Market         string `json:"market"`
-	BuyExchange    string `json:"buyExchange"`
-	SellExchange   string `json:"sellExchange"`
-	BaseSize       string `json:"baseSize"`
-	BuyNotional    string `json:"buyNotional"`
-	SellNotional   string `json:"sellNotional"`
-	BuyFee         string `json:"buyFee"`
-	SellFee        string `json:"sellFee"`
-	LatencyPenalty string `json:"latencyPenalty"`
-	RebalanceCost  string `json:"rebalanceCost"`
-	NetProfit      string `json:"netProfit"`
-	TermsSource    string `json:"termsSource"`
+	ID                string `json:"id"`
+	ExecutedAt        string `json:"executedAt"`
+	Market            string `json:"market"`
+	BuyExchange       string `json:"buyExchange"`
+	SellExchange      string `json:"sellExchange"`
+	BuyLiquidity      string `json:"buyLiquidity"`
+	SellLiquidity     string `json:"sellLiquidity"`
+	BaseSize          string `json:"baseSize"`
+	BuyNotional       string `json:"buyNotional"`
+	SellNotional      string `json:"sellNotional"`
+	BuyFee            string `json:"buyFee"`
+	SellFee           string `json:"sellFee"`
+	LatencyPenalty    string `json:"latencyPenalty"`
+	RebalanceCost     string `json:"rebalanceCost"`
+	RebalanceExposure string `json:"rebalanceExposure"`
+	NetProfit         string `json:"netProfit"`
+	TermsSource       string `json:"termsSource"`
 }
 
 func New(database *database.Database) *Store {
@@ -105,7 +114,28 @@ func New(database *database.Database) *Store {
 }
 
 func (s *Store) RecordSnapshot(ctx context.Context, snapshot arbitrage.Snapshot) error {
+	return s.record(ctx, snapshot.Opportunities, snapshot.LastUpdated, true)
+}
+
+func (s *Store) RecordOpportunities(ctx context.Context, opportunities []arbitrage.Opportunity, observedAt time.Time) error {
+	return s.record(ctx, opportunities, observedAt, false)
+}
+
+func (s *Store) RecordExecutions(ctx context.Context, opportunities []arbitrage.Opportunity, executedAt time.Time) error {
+	executions := make([]arbitrage.Opportunity, 0, len(opportunities))
+	for _, opportunity := range opportunities {
+		if isExecuted(opportunity) {
+			executions = append(executions, opportunity)
+		}
+	}
+	return s.record(ctx, executions, executedAt, true)
+}
+
+func (s *Store) record(ctx context.Context, opportunities []arbitrage.Opportunity, observedAt time.Time, includeExecutions bool) error {
 	if s == nil {
+		return nil
+	}
+	if len(opportunities) == 0 {
 		return nil
 	}
 	tx, err := s.database.BeginTx(ctx, nil)
@@ -120,15 +150,15 @@ func (s *Store) RecordSnapshot(ctx context.Context, snapshot arbitrage.Snapshot)
 	}()
 
 	queries := s.queries.WithTx(tx)
-	for _, opportunity := range snapshot.Opportunities {
+	for _, opportunity := range opportunities {
 		if opportunity.ID == "" {
 			continue
 		}
-		if err := queries.InsertOpportunity(ctx, insertOpportunityParams(opportunity, snapshot.LastUpdated)); err != nil {
+		if err := queries.InsertOpportunity(ctx, insertOpportunityParams(opportunity, observedAt)); err != nil {
 			return fmt.Errorf("insert opportunity: %w", err)
 		}
-		if opportunity.Decision == arbitrage.DecisionExecute && opportunity.ReasonCode == arbitrage.ReasonExecuted {
-			if err := queries.InsertExecution(ctx, insertExecutionParams(opportunity, snapshot.LastUpdated)); err != nil {
+		if includeExecutions && isExecuted(opportunity) {
+			if err := queries.InsertExecution(ctx, insertExecutionParams(opportunity, observedAt)); err != nil {
 				return fmt.Errorf("insert execution: %w", err)
 			}
 		}
@@ -139,6 +169,10 @@ func (s *Store) RecordSnapshot(ctx context.Context, snapshot arbitrage.Snapshot)
 	}
 	committed = true
 	return nil
+}
+
+func isExecuted(opportunity arbitrage.Opportunity) bool {
+	return opportunity.Decision == arbitrage.DecisionExecute && opportunity.ReasonCode == arbitrage.ReasonExecuted
 }
 
 func (s *Store) Report(ctx context.Context, limit int64) (Report, error) {
@@ -258,20 +292,23 @@ func (s *Store) RecentExecutions(ctx context.Context, limit int64) ([]Execution,
 	executions := make([]Execution, 0, len(rows))
 	for _, row := range rows {
 		executions = append(executions, Execution{
-			ID:             row.OpportunityID,
-			ExecutedAt:     row.ExecutedAt,
-			Market:         row.Market,
-			BuyExchange:    row.BuyExchange,
-			SellExchange:   row.SellExchange,
-			BaseSize:       row.BaseSize,
-			BuyNotional:    row.BuyNotional,
-			SellNotional:   row.SellNotional,
-			BuyFee:         row.BuyFee,
-			SellFee:        row.SellFee,
-			LatencyPenalty: row.LatencyPenalty,
-			RebalanceCost:  row.RebalanceCost,
-			NetProfit:      row.NetProfit,
-			TermsSource:    row.TermsSource,
+			ID:                row.OpportunityID,
+			ExecutedAt:        row.ExecutedAt,
+			Market:            row.Market,
+			BuyExchange:       row.BuyExchange,
+			SellExchange:      row.SellExchange,
+			BuyLiquidity:      row.BuyLiquidity,
+			SellLiquidity:     row.SellLiquidity,
+			BaseSize:          row.BaseSize,
+			BuyNotional:       row.BuyNotional,
+			SellNotional:      row.SellNotional,
+			BuyFee:            row.BuyFee,
+			SellFee:           row.SellFee,
+			LatencyPenalty:    row.LatencyPenalty,
+			RebalanceCost:     row.RebalanceCost,
+			RebalanceExposure: row.RebalanceExposure,
+			NetProfit:         row.NetProfit,
+			TermsSource:       row.TermsSource,
 		})
 	}
 	return executions, nil
@@ -300,6 +337,8 @@ func opportunityFromRecentRow(row db.ListRecentOpportunitiesRow) Opportunity {
 		Market:            row.Market,
 		BuyExchange:       row.BuyExchange,
 		SellExchange:      row.SellExchange,
+		BuyLiquidity:      row.BuyLiquidity,
+		SellLiquidity:     row.SellLiquidity,
 		BaseSize:          row.BaseSize,
 		BuyNotional:       row.BuyNotional,
 		SellNotional:      row.SellNotional,
@@ -314,6 +353,10 @@ func opportunityFromRecentRow(row db.ListRecentOpportunitiesRow) Opportunity {
 		LatencyPenalty:    row.LatencyPenalty,
 		LatencyPenaltyBPS: row.LatencyPenaltyBps,
 		RebalanceCost:     row.RebalanceCost,
+		RebalanceExposure: row.RebalanceExposure,
+		FeeHurdleBPS:      row.FeeHurdleBps,
+		EdgeAfterFeesBPS:  row.EdgeAfterFeesBps,
+		MissingBPS:        row.MissingBps,
 		ExpectedNetProfit: row.ExpectedNetProfit,
 		ExpectedNetBPS:    row.ExpectedNetBps,
 		Decision:          row.Decision,
@@ -330,6 +373,8 @@ func opportunityFromPageRow(row db.ListOpportunitiesPageRow) Opportunity {
 		Market:            row.Market,
 		BuyExchange:       row.BuyExchange,
 		SellExchange:      row.SellExchange,
+		BuyLiquidity:      row.BuyLiquidity,
+		SellLiquidity:     row.SellLiquidity,
 		BaseSize:          row.BaseSize,
 		BuyNotional:       row.BuyNotional,
 		SellNotional:      row.SellNotional,
@@ -344,6 +389,10 @@ func opportunityFromPageRow(row db.ListOpportunitiesPageRow) Opportunity {
 		LatencyPenalty:    row.LatencyPenalty,
 		LatencyPenaltyBPS: row.LatencyPenaltyBps,
 		RebalanceCost:     row.RebalanceCost,
+		RebalanceExposure: row.RebalanceExposure,
+		FeeHurdleBPS:      row.FeeHurdleBps,
+		EdgeAfterFeesBPS:  row.EdgeAfterFeesBps,
+		MissingBPS:        row.MissingBps,
 		ExpectedNetProfit: row.ExpectedNetProfit,
 		ExpectedNetBPS:    row.ExpectedNetBps,
 		Decision:          row.Decision,
@@ -355,20 +404,23 @@ func opportunityFromPageRow(row db.ListOpportunitiesPageRow) Opportunity {
 
 func executionFromPageRow(row db.ListExecutionsPageRow) Execution {
 	return Execution{
-		ID:             row.OpportunityID,
-		ExecutedAt:     row.ExecutedAt,
-		Market:         row.Market,
-		BuyExchange:    row.BuyExchange,
-		SellExchange:   row.SellExchange,
-		BaseSize:       row.BaseSize,
-		BuyNotional:    row.BuyNotional,
-		SellNotional:   row.SellNotional,
-		BuyFee:         row.BuyFee,
-		SellFee:        row.SellFee,
-		LatencyPenalty: row.LatencyPenalty,
-		RebalanceCost:  row.RebalanceCost,
-		NetProfit:      row.NetProfit,
-		TermsSource:    row.TermsSource,
+		ID:                row.OpportunityID,
+		ExecutedAt:        row.ExecutedAt,
+		Market:            row.Market,
+		BuyExchange:       row.BuyExchange,
+		SellExchange:      row.SellExchange,
+		BuyLiquidity:      row.BuyLiquidity,
+		SellLiquidity:     row.SellLiquidity,
+		BaseSize:          row.BaseSize,
+		BuyNotional:       row.BuyNotional,
+		SellNotional:      row.SellNotional,
+		BuyFee:            row.BuyFee,
+		SellFee:           row.SellFee,
+		LatencyPenalty:    row.LatencyPenalty,
+		RebalanceCost:     row.RebalanceCost,
+		RebalanceExposure: row.RebalanceExposure,
+		NetProfit:         row.NetProfit,
+		TermsSource:       row.TermsSource,
 	}
 }
 
@@ -426,6 +478,8 @@ func insertOpportunityParams(opportunity arbitrage.Opportunity, fallbackTime tim
 		Market:            marketID(opportunity),
 		BuyExchange:       string(opportunity.BuyExchange),
 		SellExchange:      string(opportunity.SellExchange),
+		BuyLiquidity:      string(opportunity.BuyLiquidity),
+		SellLiquidity:     string(opportunity.SellLiquidity),
 		BaseSize:          opportunity.BaseSize.String(),
 		BuyNotional:       opportunity.BuyNotional.String(),
 		SellNotional:      opportunity.SellNotional.String(),
@@ -440,6 +494,10 @@ func insertOpportunityParams(opportunity arbitrage.Opportunity, fallbackTime tim
 		LatencyPenalty:    opportunity.LatencyPenalty.String(),
 		LatencyPenaltyBps: opportunity.LatencyPenaltyBPS.String(),
 		RebalanceCost:     opportunity.RebalanceCost.String(),
+		RebalanceExposure: opportunity.RebalanceExposure.String(),
+		FeeHurdleBps:      opportunity.FeeHurdleBPS.String(),
+		EdgeAfterFeesBps:  opportunity.EdgeAfterFeesBPS.String(),
+		MissingBps:        opportunity.MissingBPS.String(),
 		ExpectedNetProfit: opportunity.ExpectedNetProfit.String(),
 		ExpectedNetBps:    opportunity.ExpectedNetBPS.String(),
 		Decision:          string(opportunity.Decision),
@@ -451,20 +509,23 @@ func insertOpportunityParams(opportunity arbitrage.Opportunity, fallbackTime tim
 
 func insertExecutionParams(opportunity arbitrage.Opportunity, executedAt time.Time) db.InsertExecutionParams {
 	return db.InsertExecutionParams{
-		OpportunityID:  opportunity.ID,
-		ExecutedAt:     formatTime(executedAt),
-		Market:         marketID(opportunity),
-		BuyExchange:    string(opportunity.BuyExchange),
-		SellExchange:   string(opportunity.SellExchange),
-		BaseSize:       opportunity.BaseSize.String(),
-		BuyNotional:    opportunity.BuyNotional.String(),
-		SellNotional:   opportunity.SellNotional.String(),
-		BuyFee:         opportunity.BuyFee.String(),
-		SellFee:        opportunity.SellFee.String(),
-		LatencyPenalty: opportunity.LatencyPenalty.String(),
-		RebalanceCost:  opportunity.RebalanceCost.String(),
-		NetProfit:      opportunity.ExpectedNetProfit.String(),
-		TermsSource:    string(opportunity.TermsSource),
+		OpportunityID:     opportunity.ID,
+		ExecutedAt:        formatTime(executedAt),
+		Market:            marketID(opportunity),
+		BuyExchange:       string(opportunity.BuyExchange),
+		SellExchange:      string(opportunity.SellExchange),
+		BuyLiquidity:      string(opportunity.BuyLiquidity),
+		SellLiquidity:     string(opportunity.SellLiquidity),
+		BaseSize:          opportunity.BaseSize.String(),
+		BuyNotional:       opportunity.BuyNotional.String(),
+		SellNotional:      opportunity.SellNotional.String(),
+		BuyFee:            opportunity.BuyFee.String(),
+		SellFee:           opportunity.SellFee.String(),
+		LatencyPenalty:    opportunity.LatencyPenalty.String(),
+		RebalanceCost:     opportunity.RebalanceCost.String(),
+		RebalanceExposure: opportunity.RebalanceExposure.String(),
+		NetProfit:         opportunity.ExpectedNetProfit.String(),
+		TermsSource:       string(opportunity.TermsSource),
 	}
 }
 

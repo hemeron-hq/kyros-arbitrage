@@ -28,6 +28,48 @@ func TestParserEmitsSnapshot(t *testing.T) {
 	}
 }
 
+func TestParserUsesFreshTimestampForLatency(t *testing.T) {
+	receivedAt := time.UnixMilli(1_800_000_000_250)
+	payload := `{"timestampms":1800000000000,"events":[{"type":"change","side":"bid","price":"100","remaining":"1"},{"type":"change","side":"ask","price":"101","remaining":"2"}]}`
+
+	snapshot, ok, err := newParser().Parse([]byte(payload), testBinding("BTC/USD", "btcusd"), 10, receivedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected parser to emit a snapshot")
+	}
+	if snapshot.ExchangeTime.IsZero() {
+		t.Fatal("expected fresh exchange timestamp")
+	}
+	if snapshot.Latency != 250*time.Millisecond {
+		t.Fatalf("expected 250ms latency, got %s", snapshot.Latency)
+	}
+}
+
+func TestParserIgnoresStaleTimestampForLatency(t *testing.T) {
+	receivedAt := time.UnixMilli(1_800_000_011_001)
+	payload := `{"timestampms":1800000000000,"events":[{"type":"change","side":"bid","price":"100","remaining":"1"},{"type":"change","side":"ask","price":"101","remaining":"2"}]}`
+
+	snapshot, ok, err := newParser().Parse([]byte(payload), testBinding("BTC/USD", "btcusd"), 10, receivedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected parser to emit a snapshot")
+	}
+	assertBest(t, snapshot, "100", "101")
+	if !snapshot.ExchangeTime.IsZero() {
+		t.Fatalf("expected stale advisory timestamp to be ignored, got %s", snapshot.ExchangeTime)
+	}
+	if snapshot.Latency != 0 {
+		t.Fatalf("expected no exchange timestamp latency, got %s", snapshot.Latency)
+	}
+	if snapshot.Status != exchange.StatusLive {
+		t.Fatalf("expected valid book to remain live, got %s", snapshot.Status)
+	}
+}
+
 func TestWebSocketURLUsesMarketdataEndpoint(t *testing.T) {
 	rawURL := New().websocketURL(testBinding("BTC/USD", "btcusd"))
 	if !strings.HasPrefix(rawURL, "wss://api.gemini.com/v1/marketdata/btcusd?") {

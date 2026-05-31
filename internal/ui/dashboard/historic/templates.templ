@@ -83,7 +83,7 @@ templ ExecutionsCard(rows []ExecutionRow) {
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
 			<div class="terminal-table terminal-table-spaced w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
-				@table.Table(table.Props{Class: "min-w-[1320px] table-fixed"}) {
+				@table.Table(table.Props{Class: "min-w-[1460px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
 							@table.Head(table.HeadProps{Class: "w-[110px]"}) { Time }
@@ -96,6 +96,7 @@ templ ExecutionsCard(rows []ExecutionRow) {
 							@table.Head(table.HeadProps{Class: "w-[110px]"}) { Sell fee }
 							@table.Head(table.HeadProps{Class: "w-[115px]"}) { Latency }
 							@table.Head(table.HeadProps{Class: "w-[115px]"}) { Rebalance }
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) { Exposure }
 							@table.Head(table.HeadProps{Class: "w-[120px]"}) { Net P&L }
 							@table.Head(table.HeadProps{Class: "w-[110px]"}) { Terms }
 						}
@@ -103,7 +104,7 @@ templ ExecutionsCard(rows []ExecutionRow) {
 					@table.Body() {
 						if len(rows) == 0 {
 							@table.Row() {
-								<td colspan="12" class="p-4 text-sm text-muted-foreground">
+								<td colspan="13" class="p-4 text-sm text-muted-foreground">
 									No fills have been persisted for this page.
 								</td>
 							}
@@ -111,7 +112,10 @@ templ ExecutionsCard(rows []ExecutionRow) {
 						for _, row := range rows {
 							@table.Row() {
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span title={ row.ExecutedFull } class="whitespace-nowrap font-mono text-xs">{ row.Executed }</span> }
-								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="block truncate font-medium">{ row.Route }</span> }
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="block truncate font-medium">{ row.Route }</span>
+									<span class="block whitespace-nowrap font-mono text-xs text-muted-foreground">{ row.Style }</span>
+								}
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Size }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.BuyNotional }</span> }
@@ -120,6 +124,7 @@ templ ExecutionsCard(rows []ExecutionRow) {
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.SellFee }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.LatencyPenalty }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.RebalanceCost }</span> }
+								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.RebalanceExposure }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.NetProfit }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="text-xs text-muted-foreground">{ row.TermsSource }</span> }
 							}
@@ -150,7 +155,7 @@ templ OpportunitiesCard(rows []OpportunityRow) {
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
 			<div class="terminal-table terminal-table-spaced w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
-				@table.Table(table.Props{Class: "min-w-[1580px] table-fixed"}) {
+				@table.Table(table.Props{Class: "min-w-[1960px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
 							@table.Head(table.HeadProps{Class: "w-[110px]"}) { Time }
@@ -165,6 +170,10 @@ templ OpportunitiesCard(rows []OpportunityRow) {
 							@table.Head(table.HeadProps{Class: "w-[110px]"}) { Slippage }
 							@table.Head(table.HeadProps{Class: "w-[115px]"}) { Latency }
 							@table.Head(table.HeadProps{Class: "w-[115px]"}) { Rebalance }
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) { Exposure }
+							@table.Head(table.HeadProps{Class: "w-[105px]"}) { Hurdle }
+							@table.Head(table.HeadProps{Class: "w-[105px]"}) { Edge-fees }
+							@table.Head(table.HeadProps{Class: "w-[105px]"}) { Missing }
 							@table.Head(table.HeadProps{Class: "w-[120px]"}) { Net P&L }
 							@table.Head(table.HeadProps{Class: "w-[95px]"}) { Net bps }
 							@table.Head(table.HeadProps{Class: "w-[105px]"}) { Decision }
@@ -175,7 +184,7 @@ templ OpportunitiesCard(rows []OpportunityRow) {
 					@table.Body() {
 						if len(rows) == 0 {
 							@table.Row() {
-								<td colspan="17" class="p-4 text-sm text-muted-foreground">
+								<td colspan="21" class="p-4 text-sm text-muted-foreground">
 									No opportunities have been persisted for this page.
 								</td>
 							}
@@ -183,7 +192,10 @@ templ OpportunitiesCard(rows []OpportunityRow) {
 						for _, row := range rows {
 							@table.Row() {
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span title={ row.ObservedFull } class="whitespace-nowrap font-mono text-xs">{ row.Observed }</span> }
-								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="block truncate font-medium">{ row.Route }</span> }
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="block truncate font-medium">{ row.Route }</span>
+									<span class="block whitespace-nowrap font-mono text-xs text-muted-foreground">{ row.Style }</span>
+								}
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Size }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.BuyNotional }</span> }
@@ -194,6 +206,10 @@ templ OpportunitiesCard(rows []OpportunityRow) {
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.SlippageCost }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.LatencyPenalty }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.RebalanceCost }</span> }
+								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.RebalanceExposure }</span> }
+								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.FeeHurdleBPS }</span> }
+								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.EdgeAfterFeesBPS }</span> }
+								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.MissingBPS }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.ExpectedNetProfit }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) { <span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.ExpectedNetBPS }</span> }
 								@table.Cell(table.CellProps{Class: "align-top"}) {

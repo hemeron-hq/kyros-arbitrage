@@ -12,7 +12,7 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 )
 
-func TestEvaluateSubtractsRebalanceCost(t *testing.T) {
+func TestEvaluateTracksRebalanceExposureWithoutChargingTrade(t *testing.T) {
 	now := time.Now()
 	engine := NewEngine(terms.NewStore(now), paper.NewLedger(), nil)
 	snapshots := profitableSnapshots(now, "100", "150")
@@ -26,15 +26,18 @@ func TestEvaluateSubtractsRebalanceCost(t *testing.T) {
 	if opportunity.Decision != DecisionExecute {
 		t.Fatalf("expected executable route, got %s/%s", opportunity.Decision, opportunity.ReasonCode)
 	}
-	if !opportunity.RebalanceCost.Equal(decimal.MustNew(801, 2)) {
-		t.Fatalf("expected 8.01 rebalance cost, got %s", opportunity.RebalanceCost)
+	if !opportunity.RebalanceCost.IsZero() {
+		t.Fatalf("expected no charged rebalance cost, got %s", opportunity.RebalanceCost)
 	}
-	if !opportunity.ExpectedNetProfit.Equal(decimal.MustNew(41290, 3)) {
-		t.Fatalf("expected net profit after rebalance, got %s", opportunity.ExpectedNetProfit)
+	if !opportunity.RebalanceExposure.Equal(decimal.MustNew(801, 2)) {
+		t.Fatalf("expected 8.01 rebalance exposure, got %s", opportunity.RebalanceExposure)
+	}
+	if !opportunity.ExpectedNetProfit.Equal(decimal.MustNew(493, 1)) {
+		t.Fatalf("expected net profit without charged rebalance, got %s", opportunity.ExpectedNetProfit)
 	}
 }
 
-func TestEvaluateSkipsAuthenticatedTermsWithoutTransferFees(t *testing.T) {
+func TestEvaluateDoesNotRequireTransferFeesForInventoryDrift(t *testing.T) {
 	now := time.Now()
 	termsStore := terms.NewStore(now)
 	termsStore.Apply(authenticatedTerms(exchange.Binance, now))
@@ -47,8 +50,38 @@ func TestEvaluateSkipsAuthenticatedTermsWithoutTransferFees(t *testing.T) {
 	if len(result.Opportunities) == 0 {
 		t.Fatal("expected opportunities")
 	}
-	if result.Opportunities[0].ReasonCode != ReasonTransferFeeMissing {
-		t.Fatalf("expected missing transfer fee skip, got %s", result.Opportunities[0].ReasonCode)
+	if result.Opportunities[0].Decision != DecisionExecute {
+		t.Fatalf("expected executable inventory-drift route, got %s/%s", result.Opportunities[0].Decision, result.Opportunities[0].ReasonCode)
+	}
+	if !result.Opportunities[0].RebalanceExposure.IsZero() {
+		t.Fatalf("expected zero exposure when transfer fees are unavailable, got %s", result.Opportunities[0].RebalanceExposure)
+	}
+}
+
+func TestMakerRouteRequiresConfirmationTick(t *testing.T) {
+	now := time.Now()
+	engine := NewEngine(terms.NewStore(now), paper.NewLedger(), nil)
+	market := exchange.Market{Base: "BTC", Quote: "USDT"}
+	snapshots := []exchange.OrderBookSnapshot{
+		testBook(exchange.Binance, market, now, "100", "101", 1),
+		testBook(exchange.Kraken, market, now, "101.2", "102", 1),
+	}
+
+	engine.Evaluate(snapshots, now)
+	first := engine.Evaluate(snapshots, now.Add(time.Millisecond))
+	if len(first.Opportunities) == 0 {
+		t.Fatal("expected opportunities")
+	}
+	if first.Opportunities[0].Decision != DecisionWait || first.Opportunities[0].ReasonCode != ReasonWaitingMakerConfirm {
+		t.Fatalf("expected maker confirmation wait, got %s/%s", first.Opportunities[0].Decision, first.Opportunities[0].ReasonCode)
+	}
+	if first.Opportunities[0].BuyLiquidity != LiquidityMaker || first.Opportunities[0].SellLiquidity != LiquidityTaker {
+		t.Fatalf("expected top route to be maker/taker, got %s/%s", first.Opportunities[0].BuyLiquidity, first.Opportunities[0].SellLiquidity)
+	}
+
+	second := engine.Evaluate(snapshots, now.Add(2*time.Millisecond))
+	if second.Opportunities[0].Decision != DecisionExecute {
+		t.Fatalf("expected confirmed maker route to execute, got %s/%s", second.Opportunities[0].Decision, second.Opportunities[0].ReasonCode)
 	}
 }
 

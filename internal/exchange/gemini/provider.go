@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	defaultRESTBaseURL = "https://api.gemini.com"
-	defaultWSBaseURL   = "wss://api.gemini.com"
+	defaultRESTBaseURL         = "https://api.gemini.com"
+	defaultWSBaseURL           = "wss://api.gemini.com"
+	maxAdvisoryExchangeTimeAge = 10 * time.Second
 )
 
 type Provider struct {
@@ -141,7 +142,7 @@ func (p *parser) Parse(payload []byte, binding exchange.Binding, depth int, rece
 			return exchange.OrderBookSnapshot{}, false, err
 		}
 	}
-	out, err := snapshot(binding, p.book.sorted(depth, true), p.book.sorted(depth, false), receivedAt, unixMillis(message.Timestamp), 0, exchange.TransportWebSocket, "marketdata live")
+	out, err := snapshot(binding, p.book.sorted(depth, true), p.book.sorted(depth, false), receivedAt, advisoryExchangeTime(message.Timestamp, receivedAt), 0, exchange.TransportWebSocket, "marketdata live")
 	return out, err == nil, err
 }
 
@@ -253,6 +254,20 @@ func snapshot(binding exchange.Binding, bids []exchange.PriceLevel, asks []excha
 		Status:       exchange.StatusLive,
 		Message:      message,
 	}, nil
+}
+
+func advisoryExchangeTime(timestampMS int64, receivedAt time.Time) time.Time {
+	exchangeTime := unixMillis(timestampMS)
+	if exchangeTime.IsZero() || receivedAt.IsZero() {
+		return time.Time{}
+	}
+	if exchangeTime.After(receivedAt) {
+		return time.Time{}
+	}
+	if receivedAt.Sub(exchangeTime) > maxAdvisoryExchangeTimeAge {
+		return time.Time{}
+	}
+	return exchangeTime
 }
 
 func firstNonEmpty(values ...string) string {

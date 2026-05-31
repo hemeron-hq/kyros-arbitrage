@@ -13,6 +13,27 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 )
 
+const (
+	makerVisibleSizeRate  = 25
+	makerConfirmBufferBPS = 2
+	makerConfirmTTL       = 3 * time.Second
+)
+
+var directRouteStyles = []routeStyle{
+	{BuyLiquidity: LiquidityTaker, SellLiquidity: LiquidityTaker},
+	{BuyLiquidity: LiquidityMaker, SellLiquidity: LiquidityTaker},
+	{BuyLiquidity: LiquidityTaker, SellLiquidity: LiquidityMaker},
+}
+
+type routeStyle struct {
+	BuyLiquidity  LiquidityRole
+	SellLiquidity LiquidityRole
+}
+
+type pendingMakerCandidate struct {
+	firstSeen time.Time
+}
+
 type Engine struct {
 	mu                sync.Mutex
 	termsStore        *terms.Store
@@ -20,6 +41,7 @@ type Engine struct {
 	latency           *LatencyModel
 	riskController    *risk.Controller
 	executedIDs       map[string]struct{}
+	pendingMaker      map[string]pendingMakerCandidate
 	sessionBestNet    Opportunity
 	hasSessionBestNet bool
 }
@@ -31,6 +53,7 @@ func NewEngine(termsStore *terms.Store, ledger portfolio.Store, riskController *
 		latency:        NewLatencyModel(5 * time.Minute),
 		riskController: riskController,
 		executedIDs:    make(map[string]struct{}),
+		pendingMaker:   make(map[string]pendingMakerCandidate),
 	}
 }
 
@@ -48,6 +71,7 @@ func (e *Engine) evaluate(snapshots []exchange.OrderBookSnapshot, now time.Time,
 
 	e.latency.Observe(snapshots, now)
 	e.seedActualBalances(now)
+	e.expirePendingMaker(now)
 
 	opportunities := e.findOpportunities(snapshots, now, execute)
 	sort.Slice(opportunities, func(i, j int) bool {
@@ -76,7 +100,12 @@ func (e *Engine) evaluate(snapshots []exchange.OrderBookSnapshot, now time.Time,
 		}
 	}
 	if execute && len(opportunities) > 0 && opportunities[0].Decision == DecisionExecute {
-		e.executeBest(&opportunities[0], now)
+		if e.needsMakerConfirmation(opportunities[0]) && !e.confirmMakerCandidate(opportunities[0], now) {
+			opportunities[0].Decision = DecisionWait
+			opportunities[0].ReasonCode = ReasonWaitingMakerConfirm
+		} else {
+			e.executeBest(&opportunities[0], now)
+		}
 	}
 	e.observeSessionBestNet(opportunities)
 
@@ -137,8 +166,7 @@ func (e *Engine) findOpportunities(snapshots []exchange.OrderBookSnapshot, now t
 				if buy.Exchange == sell.Exchange {
 					continue
 				}
-				opportunity := e.evaluatePair(buy, sell, now, execute)
-				opportunities = append(opportunities, opportunity)
+				opportunities = append(opportunities, e.evaluatePair(buy, sell, now, execute)...)
 			}
 		}
 	}
@@ -154,17 +182,27 @@ func (e *Engine) findOpportunities(snapshots []exchange.OrderBookSnapshot, now t
 	return opportunities
 }
 
-func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot, now time.Time, execute bool) Opportunity {
+func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot, now time.Time, execute bool) []Opportunity {
+	opportunities := make([]Opportunity, 0, len(directRouteStyles))
+	for _, style := range directRouteStyles {
+		opportunities = append(opportunities, e.evaluatePairStyle(buy, sell, now, execute, style))
+	}
+	return opportunities
+}
+
+func (e *Engine) evaluatePairStyle(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot, now time.Time, execute bool, style routeStyle) Opportunity {
 	market := buy.Market
 	opportunity := Opportunity{
-		ID:           opportunityID(buy, sell),
-		Market:       market,
-		BuyExchange:  buy.Exchange,
-		SellExchange: sell.Exchange,
-		Decision:     DecisionSkip,
-		ReasonCode:   ReasonNoGrossEdge,
-		CreatedAt:    now,
+		Market:        market,
+		BuyExchange:   buy.Exchange,
+		SellExchange:  sell.Exchange,
+		BuyLiquidity:  style.BuyLiquidity,
+		SellLiquidity: style.SellLiquidity,
+		Decision:      DecisionSkip,
+		ReasonCode:    ReasonNoGrossEdge,
+		CreatedAt:     now,
 	}
+	opportunity.ID = opportunityID(buy, sell, style)
 
 	buyTerms, buyOK := e.termsStore.Snapshot(buy.Key())
 	sellTerms, sellOK := e.termsStore.Snapshot(sell.Key())
@@ -175,19 +213,22 @@ func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.Orde
 	}
 	opportunity.TermsSource = terms.CombinedSource(buyTerms.Source, sellTerms.Source)
 
-	topAsk, askOK := buy.BestAsk()
-	topBid, bidOK := sell.BestBid()
-	if !askOK || !bidOK {
+	buyLevels, sellLevels := levelsForStyle(buy, sell, style)
+	topBuy, buyLevelOK := firstLevel(buyLevels)
+	topSell, sellLevelOK := firstLevel(sellLevels)
+	if !buyLevelOK || !sellLevelOK {
 		return opportunity
 	}
 
-	maxBaseAtTop, balanceOK := e.maxBaseByBalance(market, topAsk.Price, buy.Exchange, sell.Exchange, buyTerms.Fees.TakerRate)
+	buyFeeRate := feeRate(buyTerms.Fees, style.BuyLiquidity)
+	sellFeeRate := feeRate(sellTerms.Fees, style.SellLiquidity)
+	maxBaseAtTop, balanceOK := e.maxBaseByBalance(market, topBuy.Price, buy.Exchange, sell.Exchange, buyFeeRate)
 	if !balanceOK || !maxBaseAtTop.IsPos() {
 		opportunity.ReasonCode = ReasonInsufficientBalance
 		return opportunity
 	}
-	if topBid.Price.Cmp(topAsk.Price) <= 0 {
-		e.previewNoGrossEdge(&opportunity, topAsk, topBid, buyTerms, sellTerms, maxBaseAtTop)
+	if topSell.Price.Cmp(topBuy.Price) <= 0 {
+		e.previewNoGrossEdge(&opportunity, topBuy, topSell, buyFeeRate, sellFeeRate, maxBaseAtTop)
 		return opportunity
 	}
 
@@ -200,7 +241,18 @@ func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.Orde
 
 	quoteBalance := e.ledger.Balance(buy.Exchange, market.Quote)
 	baseBalance := e.ledger.Balance(sell.Exchange, market.Base)
-	selection := selectBestNetDepth(buy.Asks, sell.Bids, quoteBalance, baseBalance, buyTerms, sellTerms, latencyBPS)
+	selection := selectBestNetDepth(
+		buyLevels,
+		sellLevels,
+		quoteBalance,
+		baseBalance,
+		buyTerms,
+		sellTerms,
+		buyFeeRate,
+		sellFeeRate,
+		latencyBPS,
+		routeBaseCap(buyLevels, sellLevels, style),
+	)
 	if !selection.HasDepth {
 		opportunity.ReasonCode = ReasonInsufficientBalance
 		return opportunity
@@ -223,34 +275,25 @@ func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.Orde
 	opportunity.ExpectedNetProfit = selection.ExpectedNetProfit
 	opportunity.ExpectedNetBPS = selection.ExpectedNetBPS
 	opportunity.Partial = selection.Partial
-	rebalanceCost, rebalanceOK := rebalanceCost(market, selection.Depth, buyTerms, sellTerms)
-	if !rebalanceOK {
-		opportunity.Decision = DecisionSkip
-		opportunity.ReasonCode = ReasonTransferFeeMissing
-		return opportunity
-	}
-	opportunity.RebalanceCost = rebalanceCost
-	if rebalanceCost.IsPos() {
-		net, err := opportunity.ExpectedNetProfit.Sub(rebalanceCost)
-		if err != nil {
-			opportunity.Decision = DecisionSkip
-			opportunity.ReasonCode = ReasonNegativeNet
-			return opportunity
-		}
-		opportunity.ExpectedNetProfit = net
-		opportunity.ExpectedNetBPS = bps(net, opportunity.BuyNotional)
-	}
+	opportunity.RebalanceCost = decimal.Zero
+	opportunity.RebalanceExposure, _ = rebalanceExposure(market, selection.Depth, buyTerms, sellTerms)
 
-	topGross := mul(selection.Depth.Base, mustSub(topBid.Price, topAsk.Price))
+	topGross := mul(selection.Depth.Base, mustSub(topSell.Price, topBuy.Price))
 	slippageCost, err := topGross.Sub(selection.GrossProfit)
 	if err == nil && slippageCost.IsPos() {
 		opportunity.SlippageCost = slippageCost
 		opportunity.SlippageBPS = bps(slippageCost, selection.Depth.BuyNotional)
 	}
+	applyDiagnostics(&opportunity)
 
 	if !opportunity.ExpectedNetProfit.IsPos() {
 		opportunity.Decision = DecisionSkip
 		opportunity.ReasonCode = ReasonNegativeNet
+		return opportunity
+	}
+	if e.needsMakerConfirmation(opportunity) && opportunity.ExpectedNetBPS.Cmp(decimal.MustNew(makerConfirmBufferBPS, 0)) < 0 {
+		opportunity.Decision = DecisionSkip
+		opportunity.ReasonCode = ReasonBelowMakerBuffer
 		return opportunity
 	}
 	riskDecision := e.evaluateRisk(opportunity, quoteBalance, baseBalance, execute)
@@ -285,31 +328,53 @@ type netDepthSelection struct {
 	Partial           bool
 }
 
-func selectBestNetDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel, quoteBalance decimal.Decimal, baseBalance decimal.Decimal, buyTerms terms.Snapshot, sellTerms terms.Snapshot, latencyBPS decimal.Decimal) netDepthSelection {
+func selectBestNetDepth(
+	buyLevels []exchange.PriceLevel,
+	sellLevels []exchange.PriceLevel,
+	quoteBalance decimal.Decimal,
+	baseBalance decimal.Decimal,
+	buyTerms terms.Snapshot,
+	sellTerms terms.Snapshot,
+	buyFeeRate decimal.Decimal,
+	sellFeeRate decimal.Decimal,
+	latencyBPS decimal.Decimal,
+	baseCap decimal.Decimal,
+) netDepthSelection {
 	var current DepthResult
 	var best netDepthSelection
-	askIndex := 0
-	bidIndex := 0
-	askRemaining := decimal.Zero
-	bidRemaining := decimal.Zero
+	buyIndex := 0
+	sellIndex := 0
+	buyRemaining := decimal.Zero
+	sellRemaining := decimal.Zero
 
-	for askIndex < len(asks) && bidIndex < len(bids) {
-		ask := asks[askIndex]
-		bid := bids[bidIndex]
-		if bid.Price.Cmp(ask.Price) <= 0 {
+	for buyIndex < len(buyLevels) && sellIndex < len(sellLevels) {
+		buyLevel := buyLevels[buyIndex]
+		sellLevel := sellLevels[sellIndex]
+		if sellLevel.Price.Cmp(buyLevel.Price) <= 0 {
 			break
 		}
 
-		if askRemaining.IsZero() {
-			askRemaining = ask.Quantity
+		if buyRemaining.IsZero() {
+			buyRemaining = buyLevel.Quantity
 		}
-		if bidRemaining.IsZero() {
-			bidRemaining = bid.Quantity
+		if sellRemaining.IsZero() {
+			sellRemaining = sellLevel.Quantity
 		}
 
-		liquiditySize := askRemaining.Min(bidRemaining)
+		liquiditySize := buyRemaining.Min(sellRemaining)
 		size := liquiditySize
 		balanceLimited := false
+
+		if baseCap.IsPos() {
+			remainingCap, ok := remainingBalance(baseCap, current.Base)
+			if !ok {
+				break
+			}
+			if remainingCap.Cmp(size) < 0 {
+				size = remainingCap
+				balanceLimited = true
+			}
+		}
 
 		remainingBase, ok := remainingBalance(baseBalance, current.Base)
 		if !ok {
@@ -320,7 +385,7 @@ func selectBestNetDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel, 
 			balanceLimited = true
 		}
 
-		remainingQuoteSize, ok := remainingQuoteBaseSize(quoteBalance, current.BuyNotional, ask.Price, buyTerms.Fees.TakerRate)
+		remainingQuoteSize, ok := remainingQuoteBaseSize(quoteBalance, current.BuyNotional, buyLevel.Price, buyFeeRate)
 		if !ok {
 			break
 		}
@@ -337,17 +402,17 @@ func selectBestNetDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel, 
 		if err != nil {
 			return netDepthSelection{}
 		}
-		current.BuyNotional, err = addMul(current.BuyNotional, size, ask.Price)
+		current.BuyNotional, err = addMul(current.BuyNotional, size, buyLevel.Price)
 		if err != nil {
 			return netDepthSelection{}
 		}
-		current.SellNotional, err = addMul(current.SellNotional, size, bid.Price)
+		current.SellNotional, err = addMul(current.SellNotional, size, sellLevel.Price)
 		if err != nil {
 			return netDepthSelection{}
 		}
 		current.OK = true
 
-		candidate, ok := buildNetDepthSelection(current, buyTerms.Fees.TakerRate, sellTerms.Fees.TakerRate, latencyBPS)
+		candidate, ok := buildNetDepthSelection(current, buyFeeRate, sellFeeRate, latencyBPS)
 		if !ok {
 			return netDepthSelection{}
 		}
@@ -362,19 +427,19 @@ func selectBestNetDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel, 
 			best = candidate
 		}
 
-		askRemaining, err = askRemaining.Sub(size)
+		buyRemaining, err = buyRemaining.Sub(size)
 		if err != nil {
 			return netDepthSelection{}
 		}
-		bidRemaining, err = bidRemaining.Sub(size)
+		sellRemaining, err = sellRemaining.Sub(size)
 		if err != nil {
 			return netDepthSelection{}
 		}
-		if askRemaining.IsZero() {
-			askIndex++
+		if buyRemaining.IsZero() {
+			buyIndex++
 		}
-		if bidRemaining.IsZero() {
-			bidIndex++
+		if sellRemaining.IsZero() {
+			sellIndex++
 		}
 		if balanceLimited {
 			break
@@ -468,8 +533,8 @@ func remainingQuoteBalance(quoteBalance decimal.Decimal, buyNotional decimal.Dec
 	return remaining, true
 }
 
-func (e *Engine) previewNoGrossEdge(opportunity *Opportunity, topAsk exchange.PriceLevel, topBid exchange.PriceLevel, buyTerms terms.Snapshot, sellTerms terms.Snapshot, maxBaseByBalance decimal.Decimal) {
-	size := topAsk.Quantity.Min(topBid.Quantity)
+func (e *Engine) previewNoGrossEdge(opportunity *Opportunity, topBuy exchange.PriceLevel, topSell exchange.PriceLevel, buyFeeRate decimal.Decimal, sellFeeRate decimal.Decimal, maxBaseByBalance decimal.Decimal) {
+	size := topBuy.Quantity.Min(topSell.Quantity)
 	if maxBaseByBalance.IsPos() {
 		size = size.Min(maxBaseByBalance)
 	}
@@ -478,16 +543,16 @@ func (e *Engine) previewNoGrossEdge(opportunity *Opportunity, topAsk exchange.Pr
 	}
 
 	opportunity.BaseSize = size
-	opportunity.BuyNotional = mul(size, topAsk.Price)
-	opportunity.SellNotional = mul(size, topBid.Price)
+	opportunity.BuyNotional = mul(size, topBuy.Price)
+	opportunity.SellNotional = mul(size, topSell.Price)
 	grossProfit, err := opportunity.SellNotional.Sub(opportunity.BuyNotional)
 	if err != nil {
 		return
 	}
 	opportunity.GrossProfit = grossProfit
 	opportunity.GrossBPS = bps(grossProfit, opportunity.BuyNotional)
-	opportunity.BuyFee = mul(opportunity.BuyNotional, buyTerms.Fees.TakerRate)
-	opportunity.SellFee = mul(opportunity.SellNotional, sellTerms.Fees.TakerRate)
+	opportunity.BuyFee = mul(opportunity.BuyNotional, buyFeeRate)
+	opportunity.SellFee = mul(opportunity.SellNotional, sellFeeRate)
 	tradingFees, err := opportunity.BuyFee.Add(opportunity.SellFee)
 	if err != nil {
 		return
@@ -500,9 +565,10 @@ func (e *Engine) previewNoGrossEdge(opportunity *Opportunity, topAsk exchange.Pr
 	}
 	opportunity.ExpectedNetProfit = net
 	opportunity.ExpectedNetBPS = bps(net, opportunity.BuyNotional)
+	applyDiagnostics(opportunity)
 }
 
-func rebalanceCost(market exchange.Market, depth DepthResult, buyTerms terms.Snapshot, sellTerms terms.Snapshot) (decimal.Decimal, bool) {
+func rebalanceExposure(market exchange.Market, depth DepthResult, buyTerms terms.Snapshot, sellTerms terms.Snapshot) (decimal.Decimal, bool) {
 	if !depth.Base.IsPos() || !depth.BuyNotional.IsPos() {
 		return decimal.Zero, false
 	}
@@ -538,6 +604,90 @@ func transferFeeFor(snapshot terms.Snapshot, asset string) (decimal.Decimal, boo
 		return decimal.Zero, false
 	}
 	return value, true
+}
+
+func levelsForStyle(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot, style routeStyle) ([]exchange.PriceLevel, []exchange.PriceLevel) {
+	buyLevels := buy.Asks
+	if style.BuyLiquidity == LiquidityMaker {
+		buyLevels = buy.Bids
+	}
+	sellLevels := sell.Bids
+	if style.SellLiquidity == LiquidityMaker {
+		sellLevels = sell.Asks
+	}
+	return buyLevels, sellLevels
+}
+
+func firstLevel(levels []exchange.PriceLevel) (exchange.PriceLevel, bool) {
+	if len(levels) == 0 {
+		return exchange.PriceLevel{}, false
+	}
+	return levels[0], true
+}
+
+func feeRate(schedule exchange.FeeSchedule, role LiquidityRole) decimal.Decimal {
+	if role == LiquidityMaker {
+		return schedule.MakerRate
+	}
+	return schedule.TakerRate
+}
+
+func routeBaseCap(buyLevels []exchange.PriceLevel, sellLevels []exchange.PriceLevel, style routeStyle) decimal.Decimal {
+	cap := decimal.Zero
+	if style.BuyLiquidity == LiquidityMaker {
+		cap = makerBaseCap(buyLevels)
+	}
+	if style.SellLiquidity == LiquidityMaker {
+		sellCap := makerBaseCap(sellLevels)
+		if !cap.IsPos() || sellCap.Cmp(cap) < 0 {
+			cap = sellCap
+		}
+	}
+	return cap
+}
+
+func makerBaseCap(levels []exchange.PriceLevel) decimal.Decimal {
+	top, ok := firstLevel(levels)
+	if !ok || !top.Quantity.IsPos() {
+		return decimal.Zero
+	}
+	cap, err := top.Quantity.Mul(decimal.MustNew(makerVisibleSizeRate, 0))
+	if err != nil {
+		return decimal.Zero
+	}
+	cap, err = cap.Quo(decimal.MustNew(100, 0))
+	if err != nil {
+		return decimal.Zero
+	}
+	return cap
+}
+
+func applyDiagnostics(opportunity *Opportunity) {
+	latencyAndFees, err := opportunity.TradingFeeBPS.Add(opportunity.LatencyPenaltyBPS)
+	if err != nil {
+		latencyAndFees = opportunity.TradingFeeBPS
+	}
+	rebalanceBPS := bps(opportunity.RebalanceCost, opportunity.BuyNotional)
+	feeHurdle, err := latencyAndFees.Add(rebalanceBPS)
+	if err != nil {
+		feeHurdle = latencyAndFees
+	}
+	opportunity.FeeHurdleBPS = feeHurdle
+	edgeAfterFees, err := opportunity.GrossBPS.Sub(feeHurdle)
+	if err != nil {
+		edgeAfterFees = decimal.Zero
+	}
+	opportunity.EdgeAfterFeesBPS = edgeAfterFees
+	required := decimal.Zero
+	if opportunity.BuyLiquidity == LiquidityMaker || opportunity.SellLiquidity == LiquidityMaker {
+		required = decimal.MustNew(makerConfirmBufferBPS, 0)
+	}
+	if edgeAfterFees.Cmp(required) < 0 {
+		missing, err := required.Sub(edgeAfterFees)
+		if err == nil {
+			opportunity.MissingBPS = missing
+		}
+	}
 }
 
 func (e *Engine) evaluateRisk(opportunity Opportunity, quoteBalance decimal.Decimal, baseBalance decimal.Decimal, execute bool) risk.Decision {
@@ -600,20 +750,23 @@ func (e *Engine) executeBest(opportunity *Opportunity, now time.Time) {
 	}
 
 	execution := portfolio.Execution{
-		ID:             opportunity.ID,
-		Market:         opportunity.Market,
-		BuyExchange:    opportunity.BuyExchange,
-		SellExchange:   opportunity.SellExchange,
-		BaseSize:       opportunity.BaseSize,
-		BuyNotional:    opportunity.BuyNotional,
-		SellNotional:   opportunity.SellNotional,
-		BuyFee:         opportunity.BuyFee,
-		SellFee:        opportunity.SellFee,
-		LatencyPenalty: opportunity.LatencyPenalty,
-		RebalanceCost:  opportunity.RebalanceCost,
-		NetProfit:      opportunity.ExpectedNetProfit,
-		TermsSource:    opportunity.TermsSource,
-		ExecutedAt:     now,
+		ID:                opportunity.ID,
+		Market:            opportunity.Market,
+		BuyExchange:       opportunity.BuyExchange,
+		SellExchange:      opportunity.SellExchange,
+		BuyLiquidity:      string(opportunity.BuyLiquidity),
+		SellLiquidity:     string(opportunity.SellLiquidity),
+		BaseSize:          opportunity.BaseSize,
+		BuyNotional:       opportunity.BuyNotional,
+		SellNotional:      opportunity.SellNotional,
+		BuyFee:            opportunity.BuyFee,
+		SellFee:           opportunity.SellFee,
+		LatencyPenalty:    opportunity.LatencyPenalty,
+		RebalanceCost:     opportunity.RebalanceCost,
+		RebalanceExposure: opportunity.RebalanceExposure,
+		NetProfit:         opportunity.ExpectedNetProfit,
+		TermsSource:       opportunity.TermsSource,
+		ExecutedAt:        now,
 	}
 	if !e.ledger.Apply(execution) {
 		if e.riskController != nil {
@@ -624,6 +777,7 @@ func (e *Engine) executeBest(opportunity *Opportunity, now time.Time) {
 		return
 	}
 	e.executedIDs[opportunity.ID] = struct{}{}
+	delete(e.pendingMaker, makerConfirmationKey(*opportunity))
 }
 
 func passesMarketConstraints(depth DepthResult, buyConstraints exchange.MarketConstraints, sellConstraints exchange.MarketConstraints) bool {
@@ -632,12 +786,48 @@ func passesMarketConstraints(depth DepthResult, buyConstraints exchange.MarketCo
 	return depth.Base.Cmp(minBase) >= 0 && depth.BuyNotional.Cmp(minNotional) >= 0
 }
 
-func opportunityID(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot) string {
+func (e *Engine) needsMakerConfirmation(opportunity Opportunity) bool {
+	return opportunity.BuyLiquidity == LiquidityMaker || opportunity.SellLiquidity == LiquidityMaker
+}
+
+func (e *Engine) confirmMakerCandidate(opportunity Opportunity, now time.Time) bool {
+	key := makerConfirmationKey(opportunity)
+	pending, ok := e.pendingMaker[key]
+	if ok && now.Sub(pending.firstSeen) <= makerConfirmTTL {
+		delete(e.pendingMaker, key)
+		return true
+	}
+	e.pendingMaker[key] = pendingMakerCandidate{firstSeen: now}
+	return false
+}
+
+func (e *Engine) expirePendingMaker(now time.Time) {
+	for key, pending := range e.pendingMaker {
+		if now.Sub(pending.firstSeen) > makerConfirmTTL {
+			delete(e.pendingMaker, key)
+		}
+	}
+}
+
+func makerConfirmationKey(opportunity Opportunity) string {
 	return fmt.Sprintf(
-		"%s:%s:%s:%d:%d:%d:%d",
+		"%s:%s:%s:%s:%s",
+		opportunity.Market.ID(),
+		opportunity.BuyExchange,
+		opportunity.SellExchange,
+		opportunity.BuyLiquidity,
+		opportunity.SellLiquidity,
+	)
+}
+
+func opportunityID(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot, style routeStyle) string {
+	return fmt.Sprintf(
+		"%s:%s:%s:%s:%s:%d:%d:%d:%d",
 		buy.Market.ID(),
 		buy.Exchange,
 		sell.Exchange,
+		style.BuyLiquidity,
+		style.SellLiquidity,
 		buy.Sequence,
 		sell.Sequence,
 		buy.ReceivedAt.UnixNano(),

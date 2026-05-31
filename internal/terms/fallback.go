@@ -107,7 +107,7 @@ var (
 			Transfers: exchange.TransferFees{"BTC": decimal.MustNew(5, 4), "USD": decimal.MustNew(25, 0)},
 		},
 		exchange.Gemini: {
-			Fees: exchange.FeeSchedule{MakerRate: decimal.MustNew(20, 4), TakerRate: decimal.MustNew(40, 4)},
+			Fees: exchange.FeeSchedule{MakerRate: decimal.MustNew(60, 4), TakerRate: decimal.MustNew(120, 4)},
 			Constraints: exchange.MarketConstraints{
 				MinBase:     decimal.MustNew(1, 5),
 				MinNotional: decimal.MustNew(1, 0),

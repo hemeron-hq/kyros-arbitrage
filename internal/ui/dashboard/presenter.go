@@ -130,22 +130,27 @@ func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 	opportunities := make([]live.OpportunityRow, 0, len(decisionSnapshot.Opportunities))
 	for _, opportunity := range decisionSnapshot.Opportunities {
 		opportunities = append(opportunities, live.OpportunityRow{
-			Route:         displayRoute(opportunity.BuyExchange, opportunity.SellExchange),
-			Market:        displayMarket(opportunity.Market),
-			Size:          displayBase(opportunity.BaseSize),
-			GrossPnl:      displaySignedQuote(opportunity.GrossProfit),
-			GrossBPS:      displaySignedBPS(opportunity.GrossBPS),
-			Fees:          displayQuote(opportunity.TradingFees),
-			Slippage:      displayQuote(opportunity.SlippageCost),
-			Latency:       displayQuote(opportunity.LatencyPenalty),
-			Rebalance:     displayQuote(opportunity.RebalanceCost),
-			CostStack:     displayCostStack(opportunity),
-			ExpectedNet:   displaySignedQuote(opportunity.ExpectedNetProfit),
-			NetBPS:        displaySignedBPS(opportunity.ExpectedNetBPS),
-			Decision:      string(opportunity.Decision),
-			DecisionClass: decisionClass(string(opportunity.Decision)),
-			ReasonLabel:   displayReasonLabel(opportunity.ReasonCode),
-			Reason:        opportunity.ReasonCode,
+			Route:             displayRoute(opportunity.BuyExchange, opportunity.SellExchange),
+			Style:             displayLiquidityStyle(string(opportunity.BuyLiquidity), string(opportunity.SellLiquidity)),
+			Market:            displayMarket(opportunity.Market),
+			Size:              displayBase(opportunity.BaseSize),
+			GrossPnl:          displaySignedQuote(opportunity.GrossProfit),
+			GrossBPS:          displaySignedBPS(opportunity.GrossBPS),
+			Fees:              displayQuote(opportunity.TradingFees),
+			Slippage:          displayQuote(opportunity.SlippageCost),
+			Latency:           displayQuote(opportunity.LatencyPenalty),
+			Rebalance:         displayQuote(opportunity.RebalanceCost),
+			RebalanceExposure: displayQuote(opportunity.RebalanceExposure),
+			FeeHurdle:         displaySignedBPS(opportunity.FeeHurdleBPS),
+			EdgeAfterFees:     displaySignedBPS(opportunity.EdgeAfterFeesBPS),
+			Missing:           displayBPS(opportunity.MissingBPS),
+			CostStack:         displayCostStack(opportunity),
+			ExpectedNet:       displaySignedQuote(opportunity.ExpectedNetProfit),
+			NetBPS:            displaySignedBPS(opportunity.ExpectedNetBPS),
+			Decision:          string(opportunity.Decision),
+			DecisionClass:     decisionClass(string(opportunity.Decision)),
+			ReasonLabel:       displayReasonLabel(opportunity.ReasonCode),
+			Reason:            opportunity.ReasonCode,
 		})
 	}
 	termsRows := make([]live.TermsSourceRow, 0, len(decisionSnapshot.TermsHealth))
@@ -331,6 +336,7 @@ func (h *Handler) historyView(ctx context.Context) live.HistoryView {
 			Observed:     observed,
 			ObservedFull: observedFull,
 			Route:        displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Style:        displayLiquidityStyle(row.BuyLiquidity, row.SellLiquidity),
 			Market:       displayHistoryMarket(row.Market),
 			Size:         displayDecimalAsBase(row.BaseSize),
 			ExpectedNet:  displaySignedDecimalAsQuote(row.ExpectedNetProfit),
@@ -345,6 +351,7 @@ func (h *Handler) historyView(ctx context.Context) live.HistoryView {
 			Executed:     executed,
 			ExecutedFull: executedFull,
 			Route:        displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Style:        displayLiquidityStyle(row.BuyLiquidity, row.SellLiquidity),
 			Market:       displayHistoryMarket(row.Market),
 			Size:         displayDecimalAsBase(row.BaseSize),
 			NetProfit:    displaySignedDecimalAsQuote(row.NetProfit),
@@ -380,6 +387,7 @@ func (h *Handler) historicView(ctx context.Context, limit int64, offset int64) h
 			Observed:          observed,
 			ObservedFull:      observedFull,
 			Route:             displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Style:             displayLiquidityStyle(row.BuyLiquidity, row.SellLiquidity),
 			Market:            displayHistoryMarket(row.Market),
 			Size:              displayDecimalAsBase(row.BaseSize),
 			BuyNotional:       displayDecimalAsQuote(row.BuyNotional),
@@ -390,6 +398,10 @@ func (h *Handler) historicView(ctx context.Context, limit int64, offset int64) h
 			SlippageCost:      displayDecimalAsQuote(row.SlippageCost),
 			LatencyPenalty:    displayDecimalAsQuote(row.LatencyPenalty),
 			RebalanceCost:     displayDecimalAsQuote(row.RebalanceCost),
+			RebalanceExposure: displayDecimalAsQuote(row.RebalanceExposure),
+			FeeHurdleBPS:      displaySignedDecimalAsBPS(row.FeeHurdleBPS),
+			EdgeAfterFeesBPS:  displaySignedDecimalAsBPS(row.EdgeAfterFeesBPS),
+			MissingBPS:        displayDecimalAsBPS(row.MissingBPS),
 			ExpectedNetProfit: displaySignedDecimalAsQuote(row.ExpectedNetProfit),
 			ExpectedNetBPS:    displaySignedDecimalAsBPS(row.ExpectedNetBPS),
 			Decision:          row.Decision,
@@ -402,19 +414,21 @@ func (h *Handler) historicView(ctx context.Context, limit int64, offset int64) h
 	for _, row := range report.Executions {
 		executed, executedFull := displayHistoryTime(row.ExecutedAt)
 		executions = append(executions, historic.ExecutionRow{
-			Executed:       executed,
-			ExecutedFull:   executedFull,
-			Route:          displayHistoryRoute(row.BuyExchange, row.SellExchange),
-			Market:         displayHistoryMarket(row.Market),
-			Size:           displayDecimalAsBase(row.BaseSize),
-			BuyNotional:    displayDecimalAsQuote(row.BuyNotional),
-			SellNotional:   displayDecimalAsQuote(row.SellNotional),
-			BuyFee:         displayDecimalAsQuote(row.BuyFee),
-			SellFee:        displayDecimalAsQuote(row.SellFee),
-			LatencyPenalty: displayDecimalAsQuote(row.LatencyPenalty),
-			RebalanceCost:  displayDecimalAsQuote(row.RebalanceCost),
-			NetProfit:      displaySignedDecimalAsQuote(row.NetProfit),
-			TermsSource:    row.TermsSource,
+			Executed:          executed,
+			ExecutedFull:      executedFull,
+			Route:             displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Style:             displayLiquidityStyle(row.BuyLiquidity, row.SellLiquidity),
+			Market:            displayHistoryMarket(row.Market),
+			Size:              displayDecimalAsBase(row.BaseSize),
+			BuyNotional:       displayDecimalAsQuote(row.BuyNotional),
+			SellNotional:      displayDecimalAsQuote(row.SellNotional),
+			BuyFee:            displayDecimalAsQuote(row.BuyFee),
+			SellFee:           displayDecimalAsQuote(row.SellFee),
+			LatencyPenalty:    displayDecimalAsQuote(row.LatencyPenalty),
+			RebalanceCost:     displayDecimalAsQuote(row.RebalanceCost),
+			RebalanceExposure: displayDecimalAsQuote(row.RebalanceExposure),
+			NetProfit:         displaySignedDecimalAsQuote(row.NetProfit),
+			TermsSource:       row.TermsSource,
 		})
 	}
 
@@ -662,6 +676,14 @@ func displaySignedDecimalAsBPS(value string) string {
 	return displaySignedBPS(parsed)
 }
 
+func displayDecimalAsBPS(value string) string {
+	parsed, ok := parseDecimal(value)
+	if !ok {
+		return "-"
+	}
+	return displayBPS(parsed)
+}
+
 func displayAssetAmount(asset string, value decimal.Decimal) string {
 	switch asset {
 	case "BTC":
@@ -764,6 +786,16 @@ func displayHistoryRoute(buyExchange string, sellExchange string) string {
 	return titleCase(buyExchange) + " -> " + titleCase(sellExchange)
 }
 
+func displayLiquidityStyle(buyLiquidity string, sellLiquidity string) string {
+	if buyLiquidity == "" {
+		buyLiquidity = string(arbitrage.LiquidityTaker)
+	}
+	if sellLiquidity == "" {
+		sellLiquidity = string(arbitrage.LiquidityTaker)
+	}
+	return buyLiquidity + "/" + sellLiquidity
+}
+
 func displayMarket(market exchange.Market) string {
 	if market.Base == "" || market.Quote == "" {
 		return "BTC/USDT"
@@ -830,10 +862,15 @@ func bestNetState(opportunity arbitrage.Opportunity) string {
 }
 
 func displayCostStack(opportunity arbitrage.Opportunity) string {
-	return "fees " + displayQuote(opportunity.TradingFees) +
+	return "style " + displayLiquidityStyle(string(opportunity.BuyLiquidity), string(opportunity.SellLiquidity)) +
+		" / hurdle " + displayBPS(opportunity.FeeHurdleBPS) +
+		" / edge after fees " + displayBPS(opportunity.EdgeAfterFeesBPS) +
+		" / missing " + displayBPS(opportunity.MissingBPS) +
+		" / fees " + displayQuote(opportunity.TradingFees) +
 		" / slip " + displayQuote(opportunity.SlippageCost) +
 		" / latency " + displayQuote(opportunity.LatencyPenalty) +
-		" / rebalance " + displayQuote(opportunity.RebalanceCost)
+		" / rebalance charged " + displayQuote(opportunity.RebalanceCost) +
+		" / rebalance exposure " + displayQuote(opportunity.RebalanceExposure)
 }
 
 func displayBool(value bool) string {

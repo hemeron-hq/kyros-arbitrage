@@ -5,22 +5,25 @@
 package db
 
 type Execution struct {
-	ID             int64  `json:"id"`
-	OpportunityID  string `json:"opportunity_id"`
-	ExecutedAt     string `json:"executed_at"`
-	Market         string `json:"market"`
-	BuyExchange    string `json:"buy_exchange"`
-	SellExchange   string `json:"sell_exchange"`
-	BaseSize       string `json:"base_size"`
-	BuyNotional    string `json:"buy_notional"`
-	SellNotional   string `json:"sell_notional"`
-	BuyFee         string `json:"buy_fee"`
-	SellFee        string `json:"sell_fee"`
-	LatencyPenalty string `json:"latency_penalty"`
-	RebalanceCost  string `json:"rebalance_cost"`
-	NetProfit      string `json:"net_profit"`
-	TermsSource    string `json:"terms_source"`
-	RecordedAt     string `json:"recorded_at"`
+	ID                int64  `json:"id"`
+	OpportunityID     string `json:"opportunity_id"`
+	ExecutedAt        string `json:"executed_at"`
+	Market            string `json:"market"`
+	BuyExchange       string `json:"buy_exchange"`
+	SellExchange      string `json:"sell_exchange"`
+	BaseSize          string `json:"base_size"`
+	BuyNotional       string `json:"buy_notional"`
+	SellNotional      string `json:"sell_notional"`
+	BuyFee            string `json:"buy_fee"`
+	SellFee           string `json:"sell_fee"`
+	LatencyPenalty    string `json:"latency_penalty"`
+	RebalanceCost     string `json:"rebalance_cost"`
+	NetProfit         string `json:"net_profit"`
+	TermsSource       string `json:"terms_source"`
+	RecordedAt        string `json:"recorded_at"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
+	RebalanceExposure string `json:"rebalance_exposure"`
 }
 
 type Opportunity struct {
@@ -51,6 +54,12 @@ type Opportunity struct {
 	TermsSource       string `json:"terms_source"`
 	Partial           int64  `json:"partial"`
 	RecordedAt        string `json:"recorded_at"`
+	BuyLiquidity      string `json:"buy_liquidity"`
+	SellLiquidity     string `json:"sell_liquidity"`
+	RebalanceExposure string `json:"rebalance_exposure"`
+	FeeHurdleBps      string `json:"fee_hurdle_bps"`
+	EdgeAfterFeesBps  string `json:"edge_after_fees_bps"`
+	MissingBps        string `json:"missing_bps"`
 }
 
 type RiskSetting struct {
