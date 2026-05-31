@@ -14,6 +14,7 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/exchanges"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/historic"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/live"
 	riskui "github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/speed"
@@ -43,6 +44,7 @@ type Handler struct {
 	metrics        *appmetrics.Collector
 	database       *database.Database
 	historyStore   *history.Store
+	historyCache   *historyCache
 }
 
 func New(deps Dependencies) *Handler {
@@ -55,6 +57,7 @@ func New(deps Dependencies) *Handler {
 		metrics:        deps.Metrics,
 		database:       deps.Database,
 		historyStore:   deps.HistoryStore,
+		historyCache:   newHistoryCache(),
 	}
 }
 
@@ -65,8 +68,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
+	options := pageOptions(r)
 	var out bytes.Buffer
-	if err := Page(h.model(r.Context(), 0, time.Now(), pageOptions(r))).Render(r.Context(), &out); err != nil {
+	if err := Page(h.model(r.Context(), 0, time.Now(), options, false)).Render(r.Context(), &out); err != nil {
 		http.Error(w, "render page", http.StatusInternalServerError)
 		return
 	}
@@ -75,12 +79,13 @@ func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
+	options := pageOptions(r)
 	sse := datastar.NewSSE(w, r)
 	ticker := time.NewTicker(uiPatchInterval)
 	defer ticker.Stop()
 
 	ticks := 0
-	if !h.patchDashboard(sse, ticks, time.Now()) {
+	if !h.patchDashboard(sse, ticks, time.Now(), options) {
 		return
 	}
 
@@ -109,7 +114,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 				ticks++
 				nextHeartbeat = now.Add(time.Second)
 			}
-			if !h.patchDashboard(sse, ticks, now) {
+			if !h.patchDashboard(sse, ticks, now, options) {
 				return
 			}
 			dirty = false
@@ -117,8 +122,8 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks int, now time.Time) bool {
-	model := h.model(sse.Context(), ticks, now, PageOptions{})
+func (h *Handler) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks int, now time.Time, options PageOptions) bool {
+	model := h.model(sse.Context(), ticks, now, options, true)
 	signals := Signals{
 		Connected:  model.Heartbeat.Connected,
 		ServerTime: model.Heartbeat.ServerTime,
@@ -149,6 +154,11 @@ func (h *Handler) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks i
 	}
 	if err := sse.PatchElementTempl(exchanges.Dashboard(model.Exchanges)); err != nil {
 		return false
+	}
+	if options.ActiveTab == "historic" {
+		if err := sse.PatchElementTempl(historic.Dashboard(model.Historic)); err != nil {
+			return false
+		}
 	}
 
 	return true

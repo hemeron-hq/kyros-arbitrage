@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/govalues/decimal"
@@ -449,22 +450,20 @@ func page(total int64, limit int64, offset int64) Page {
 }
 
 func (s *Store) totalPNL(ctx context.Context) (decimal.Decimal, error) {
-	values, err := s.queries.ListExecutionNetProfits(ctx)
+	sum, err := s.queries.SumExecutionNetProfit(ctx)
 	if err != nil {
-		return decimal.Zero, fmt.Errorf("list execution net profits: %w", err)
+		return decimal.Zero, fmt.Errorf("sum execution net profits: %w", err)
 	}
-	total := decimal.Zero
-	for _, value := range values {
-		parsed, err := decimal.Parse(value)
-		if err != nil {
-			return decimal.Zero, fmt.Errorf("parse execution net profit %q: %w", value, err)
-		}
-		total, err = total.Add(parsed)
-		if err != nil {
-			return decimal.Zero, fmt.Errorf("sum execution net profits: %w", err)
-		}
+	switch value := sum.(type) {
+	case float64:
+		return decimal.Parse(strconv.FormatFloat(value, 'f', -1, 64))
+	case int64:
+		return decimal.MustNew(value, 0), nil
+	case string:
+		return decimal.Parse(value)
+	default:
+		return decimal.Zero, fmt.Errorf("sum execution net profits: unexpected type %T", sum)
 	}
-	return total, nil
 }
 
 func insertOpportunityParams(opportunity arbitrage.Opportunity, fallbackTime time.Time) db.InsertOpportunityParams {

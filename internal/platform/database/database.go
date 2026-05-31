@@ -29,6 +29,7 @@ func Open(ctx context.Context, databaseURL string) (*Database, error) {
 	if err != nil {
 		return nil, err
 	}
+	dsn = withSQLitePragmas(dsn)
 	if err := ensureParentDir(displayPath); err != nil {
 		return nil, err
 	}
@@ -125,6 +126,14 @@ func parseSQLiteURL(raw string) (dsn string, displayPath string, err error) {
 	}
 
 	return raw, raw, nil
+}
+
+func withSQLitePragmas(dsn string) string {
+	const pragmas = "_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate"
+	if strings.Contains(dsn, "?") {
+		return dsn + "&" + pragmas
+	}
+	return dsn + "?" + pragmas
 }
 
 func ensureParentDir(path string) error {

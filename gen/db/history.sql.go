@@ -203,33 +203,6 @@ func (q *Queries) InsertOpportunity(ctx context.Context, arg InsertOpportunityPa
 	return err
 }
 
-const listExecutionNetProfits = `-- name: ListExecutionNetProfits :many
-SELECT net_profit FROM executions
-`
-
-func (q *Queries) ListExecutionNetProfits(ctx context.Context) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listExecutionNetProfits)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var net_profit string
-		if err := rows.Scan(&net_profit); err != nil {
-			return nil, err
-		}
-		items = append(items, net_profit)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listExecutionsPage = `-- name: ListExecutionsPage :many
 SELECT
   opportunity_id,
@@ -662,4 +635,15 @@ func (q *Queries) ListRecentOpportunities(ctx context.Context, limit int64) ([]L
 		return nil, err
 	}
 	return items, nil
+}
+
+const sumExecutionNetProfit = `-- name: SumExecutionNetProfit :one
+SELECT COALESCE(SUM(CAST(net_profit AS REAL)), 0) FROM executions
+`
+
+func (q *Queries) SumExecutionNetProfit(ctx context.Context) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, sumExecutionNetProfit)
+	var coalesce interface{}
+	err := row.Scan(&coalesce)
+	return coalesce, err
 }

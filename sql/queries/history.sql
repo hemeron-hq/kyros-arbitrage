@@ -180,5 +180,5 @@ SELECT count(*) FROM opportunities;
 -- name: CountExecutions :one
 SELECT count(*) FROM executions;
 
--- name: ListExecutionNetProfits :many
-SELECT net_profit FROM executions;
+-- name: SumExecutionNetProfit :one
+SELECT COALESCE(SUM(CAST(net_profit AS REAL)), 0) FROM executions;

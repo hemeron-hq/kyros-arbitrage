@@ -22,6 +22,7 @@ type Signals struct {
 type Model struct {
 	Title           string
 	StartedAt       string
+	StreamURL       string
 	Heartbeat       HeartbeatView
 	Metrics         shared.Metrics
 	Live            live.Model

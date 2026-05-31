@@ -34,21 +34,22 @@ type PageOptions struct {
 	HistoryOffset int64
 }
 
-func (h *Handler) model(ctx context.Context, ticks int, now time.Time, options PageOptions) Model {
+func (h *Handler) model(ctx context.Context, ticks int, now time.Time, options PageOptions, streaming bool) Model {
 	if options.ActiveTab == "" {
 		options.ActiveTab = "overview"
 	}
-	liveModel := h.liveModel(ctx, now)
+	liveModel := h.liveModel(ctx, now, streaming)
 	return Model{
 		Title:           "Kyros Arbitrage",
 		StartedAt:       displayTimestamp(h.startedAt),
+		StreamURL:       streamURL(options),
 		Heartbeat:       h.heartbeatView(ticks, now),
 		Metrics:         metrics(liveModel),
 		Live:            liveModel,
 		Speed:           h.speedView(now),
 		Risk:            h.riskView(),
 		Exchanges:       h.exchangesView(now),
-		Historic:        h.historicView(ctx, options.HistoryLimit, options.HistoryOffset),
+		Historic:        h.cachedHistoricView(ctx, options.HistoryLimit, options.HistoryOffset, streaming),
 		OverviewActive:  options.ActiveTab == "overview",
 		ExchangesActive: options.ActiveTab == "connections",
 		HistoricActive:  options.ActiveTab == "historic",
@@ -82,7 +83,7 @@ func metrics(model live.Model) shared.Metrics {
 	}
 }
 
-func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
+func (h *Handler) liveModel(ctx context.Context, now time.Time, streaming bool) live.Model {
 	snapshots := h.marketStore.Snapshot()
 	projection := market.Project(snapshots, now)
 	metricsSnapshot := h.metrics.Snapshot(now, projection.Feeds)
@@ -185,7 +186,7 @@ func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 		TermsRows:       termsRows,
 		BalanceRows:     balanceRows,
 		BalanceGroups:   balanceGroups(balanceRows),
-		History:         h.historyView(ctx),
+		History:         h.cachedHistoryView(ctx, streaming),
 		LiveFeeds:       liveFeeds,
 		StaleFeeds:      staleFeeds,
 		BestNetPnl:      bestNet,
@@ -318,17 +319,7 @@ func (h *Handler) exchangesView(now time.Time) exchanges.Model {
 	}
 }
 
-func (h *Handler) historyView(ctx context.Context) live.HistoryView {
-	reportCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-
-	report, err := h.historyStore.Report(reportCtx, 8)
-	if err != nil {
-		return live.HistoryView{
-			Path:   h.database.Path(),
-			Status: "history unavailable",
-		}
-	}
+func historyViewFromReport(report history.Report) live.HistoryView {
 	opportunities := make([]live.HistoryOpportunityRow, 0, len(report.Opportunities))
 	for _, row := range report.Opportunities {
 		observed, observedFull := displayHistoryTime(row.ObservedAt)
@@ -360,7 +351,7 @@ func (h *Handler) historyView(ctx context.Context) live.HistoryView {
 	}
 	return live.HistoryView{
 		Path:             report.Summary.Path,
-		Status:           "persisted",
+		Status:           historyStatusPersisted,
 		OpportunityCount: strconv.FormatInt(report.Summary.Opportunities, 10),
 		ExecutionCount:   strconv.FormatInt(report.Summary.Executions, 10),
 		TotalPnl:         displaySignedDecimalAsQuote(report.Summary.TotalPNL),
@@ -369,17 +360,7 @@ func (h *Handler) historyView(ctx context.Context) live.HistoryView {
 	}
 }
 
-func (h *Handler) historicView(ctx context.Context, limit int64, offset int64) historic.Model {
-	reportCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-
-	report, err := h.historyStore.Page(reportCtx, limit, offset)
-	if err != nil {
-		return historic.Model{
-			Path:   h.database.Path(),
-			Status: "history unavailable",
-		}
-	}
+func historicViewFromReport(report history.Report, limit int64, offset int64) historic.Model {
 	opportunities := make([]historic.OpportunityRow, 0, len(report.Opportunities))
 	for _, row := range report.Opportunities {
 		observed, observedFull := displayHistoryTime(row.ObservedAt)
@@ -434,7 +415,7 @@ func (h *Handler) historicView(ctx context.Context, limit int64, offset int64) h
 
 	return historic.Model{
 		Path:             report.Summary.Path,
-		Status:           "persisted",
+		Status:           historyStatusPersisted,
 		OpportunityCount: strconv.FormatInt(report.Summary.Opportunities, 10),
 		ExecutionCount:   strconv.FormatInt(report.Summary.Executions, 10),
 		TotalPnl:         displaySignedDecimalAsQuote(report.Summary.TotalPNL),

@@ -220,6 +220,9 @@ templ SuccessfulFillsCard(history HistoryView) {
 					</div>
 				</div>
 				<div class="text-left text-xs text-muted-foreground sm:text-right">
+					if history.Status != "" && history.Status != "persisted" {
+						<div class="text-amber-600 dark:text-amber-400">{ history.Status }</div>
+					}
 					<div>{ history.ExecutionCount } stored trades</div>
 					<div class="font-mono text-foreground">{ history.TotalPnl }</div>
 				</div>
