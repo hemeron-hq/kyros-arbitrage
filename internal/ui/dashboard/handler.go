@@ -141,10 +141,10 @@ func (h *Handler) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks i
 	if err := sse.PatchElementTempl(riskui.Panel(model.Risk)); err != nil {
 		return false
 	}
-	if err := sse.PatchElementTempl(live.BalanceCard(model.Live.BalanceRows)); err != nil {
+	if err := sse.PatchElementTempl(live.BalanceCard(model.Live.BalanceGroups)); err != nil {
 		return false
 	}
-	if err := sse.PatchElementTempl(live.Dashboard(model.Live)); err != nil {
+	if err := sse.PatchElementTempl(live.Dashboard(model.Live, model.Speed)); err != nil {
 		return false
 	}
 	if err := sse.PatchElementTempl(exchanges.Dashboard(model.Exchanges)); err != nil {

@@ -5,6 +5,7 @@ type Model struct {
 	OpportunityRows []OpportunityRow
 	TermsRows       []TermsSourceRow
 	BalanceRows     []BalanceRow
+	BalanceGroups   []BalanceGroup
 	History         HistoryView
 	LiveFeeds       int
 	StaleFeeds      int
@@ -38,26 +39,31 @@ type FeedRow struct {
 	AskSize     string
 	Levels      string
 	Age         string
+	AgeP50      string
+	AgeP95      string
+	UpdateRate  string
 	Latency     string
 	Sequence    string
 	Message     string
 }
 
 type OpportunityRow struct {
-	Route       string
-	Market      string
-	Size        string
-	GrossPnl    string
-	GrossBPS    string
-	Fees        string
-	Slippage    string
-	Latency     string
-	Rebalance   string
-	CostStack   string
-	ExpectedNet string
-	NetBPS      string
-	Decision    string
-	Reason      string
+	Route         string
+	Market        string
+	Size          string
+	GrossPnl      string
+	GrossBPS      string
+	Fees          string
+	Slippage      string
+	Latency       string
+	Rebalance     string
+	CostStack     string
+	ExpectedNet   string
+	NetBPS        string
+	Decision      string
+	DecisionClass string
+	ReasonLabel   string
+	Reason        string
 }
 
 type HistoryOpportunityRow struct {
@@ -95,4 +101,14 @@ type BalanceRow struct {
 	Asset    string
 	Amount   string
 	Source   string
+}
+
+type BalanceGroup struct {
+	Exchange string
+	Assets   []BalanceAssetRow
+}
+
+type BalanceAssetRow struct {
+	Asset  string
+	Amount string
 }

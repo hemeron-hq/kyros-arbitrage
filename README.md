@@ -103,6 +103,25 @@ task docker-run
 
 El contenedor escucha en `PORT` y usa `/var/lib/app/app.db` por defecto. Monta `/var/lib/app` como volumen si necesitas conservar el historial.
 
+## Deploy en Fly.io
+
+La app esta configurada para desplegarse como demo publica en Fly.io con una sola Machine, SQLite persistido en `/var/lib/app` y healthcheck HTTP en `/healthz`.
+
+URL publica:
+
+```text
+https://kyros-arbitrage.fly.dev/
+```
+
+```bash
+fly deploy --app kyros-arbitrage
+fly status --app kyros-arbitrage
+fly checks list --app kyros-arbitrage
+curl -fsS https://kyros-arbitrage.fly.dev/healthz
+```
+
+No configures secrets para la primera demo publica. Si se omiten `BINANCE_API_KEY`, `BINANCE_API_SECRET`, `KRAKEN_API_KEY` y `KRAKEN_API_SECRET`, Kyros usa terminos fallback visibles en la UI.
+
 ## Capturas de pantalla
 
 ### Overview realtime

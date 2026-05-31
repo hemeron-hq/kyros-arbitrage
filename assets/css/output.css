@@ -553,11 +553,11 @@
   .max-h-\[200px\] {
     max-height: 200px;
   }
-  .max-h-\[270px\] {
-    max-height: 270px;
-  }
   .max-h-\[300px\] {
     max-height: 300px;
+  }
+  .max-h-\[520px\] {
+    max-height: 520px;
   }
   .min-h-0 {
     min-height: calc(var(--spacing) * 0);
@@ -637,9 +637,6 @@
   .w-\[130px\] {
     width: 130px;
   }
-  .w-\[140px\] {
-    width: 140px;
-  }
   .w-\[150px\] {
     width: 150px;
   }
@@ -658,11 +655,8 @@
   .w-\[210px\] {
     width: 210px;
   }
-  .w-\[230px\] {
-    width: 230px;
-  }
-  .w-\[310px\] {
-    width: 310px;
+  .w-\[220px\] {
+    width: 220px;
   }
   .w-\[var\(--sidebar-width\,16rem\)\] {
     width: var(--sidebar-width,16rem);
@@ -709,12 +703,6 @@
   .min-w-\[8rem\] {
     min-width: 8rem;
   }
-  .min-w-\[520px\] {
-    min-width: 520px;
-  }
-  .min-w-\[560px\] {
-    min-width: 560px;
-  }
   .min-w-\[760px\] {
     min-width: 760px;
   }
@@ -724,8 +712,8 @@
   .min-w-\[860px\] {
     min-width: 860px;
   }
-  .min-w-\[1180px\] {
-    min-width: 1180px;
+  .min-w-\[920px\] {
+    min-width: 920px;
   }
   .min-w-\[1320px\] {
     min-width: 1320px;
@@ -835,6 +823,9 @@
   .grid-cols-\[0_1fr\] {
     grid-template-columns: 0 1fr;
   }
+  .grid-cols-\[3\.5rem_minmax\(0\,1fr\)\] {
+    grid-template-columns: 3.5rem minmax(0,1fr);
+  }
   .grid-cols-\[4rem_minmax\(0\,1fr\)\] {
     grid-template-columns: 4rem minmax(0,1fr);
   }
@@ -925,9 +916,6 @@
   }
   .gap-x-3 {
     column-gap: calc(var(--spacing) * 3);
-  }
-  .gap-x-4 {
-    column-gap: calc(var(--spacing) * 4);
   }
   .space-x-2 {
     :where(& > :not(:last-child)) {
@@ -1221,6 +1209,9 @@
   .pt-5 {
     padding-top: calc(var(--spacing) * 5);
   }
+  .pr-1 {
+    padding-right: calc(var(--spacing) * 1);
+  }
   .pr-8 {
     padding-right: calc(var(--spacing) * 8);
   }
@@ -1281,10 +1272,6 @@
   .text-\[0\.8rem\] {
     font-size: 0.8rem;
   }
-  .leading-5 {
-    --tw-leading: calc(var(--spacing) * 5);
-    line-height: calc(var(--spacing) * 5);
-  }
   .leading-none {
     --tw-leading: 1;
     line-height: 1;
@@ -1319,9 +1306,6 @@
   }
   .break-words {
     overflow-wrap: break-word;
-  }
-  .whitespace-normal {
-    white-space: normal;
   }
   .whitespace-nowrap {
     white-space: nowrap;
@@ -2772,6 +2756,11 @@
       max-width: 420px;
     }
   }
+  .md\:grid-cols-2 {
+    @media (width >= 48rem) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
   .md\:flex-row {
     @media (width >= 48rem) {
       flex-direction: row;
@@ -2891,6 +2880,11 @@
   .\32 xl\:grid-cols-2 {
     @media (width >= 96rem) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  .\32 xl\:grid-cols-3 {
+    @media (width >= 96rem) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
   .\32 xl\:grid-cols-\[minmax\(0\,1fr\)_minmax\(0\,0\.9fr\)\] {
@@ -3457,6 +3451,46 @@
   }
   .exchange-asset-row:hover, .exchange-mini-panel:hover {
     background: rgb(169 244 255 / 5.5%);
+  }
+  .decision-pill {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.72rem;
+    line-height: 1rem;
+    font-weight: 650;
+    text-transform: lowercase;
+    white-space: normal;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 8px 20px rgb(0 0 0 / 12%);
+  }
+  .decision-pill-execute {
+    background: rgb(159 255 186 / 13%);
+    color: rgb(191 255 209 / 94%);
+  }
+  .decision-pill-wait {
+    background: rgb(255 214 102 / 13%);
+    color: rgb(255 226 154 / 94%);
+  }
+  .decision-pill-skip {
+    background: rgb(255 107 107 / 13%);
+    color: rgb(255 184 184 / 94%);
+  }
+  .decision-pill-muted {
+    background: rgb(255 255 255 / 7%);
+    color: rgb(247 251 251 / 74%);
+  }
+  .wallet-group {
+    background: rgb(2 5 6 / 34%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%), inset 0 -1px 0 rgb(0 0 0 / 18%);
+  }
+  .wallet-asset-row {
+    background: rgb(255 255 255 / 4%);
+  }
+  .wallet-asset-row:hover {
+    background: rgb(169 244 255 / 6%);
   }
   .terminal-card [class*="bg-emerald"], .terminal-card [class*="bg-green"] {
     background-color: var(--mint);

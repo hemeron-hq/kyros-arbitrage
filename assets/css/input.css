@@ -337,6 +337,58 @@
     background: rgb(169 244 255 / 5.5%);
   }
 
+  .decision-pill {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.72rem;
+    line-height: 1rem;
+    font-weight: 650;
+    text-transform: lowercase;
+    white-space: normal;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 8%),
+      0 8px 20px rgb(0 0 0 / 12%);
+  }
+
+  .decision-pill-execute {
+    background: rgb(159 255 186 / 13%);
+    color: rgb(191 255 209 / 94%);
+  }
+
+  .decision-pill-wait {
+    background: rgb(255 214 102 / 13%);
+    color: rgb(255 226 154 / 94%);
+  }
+
+  .decision-pill-skip {
+    background: rgb(255 107 107 / 13%);
+    color: rgb(255 184 184 / 94%);
+  }
+
+  .decision-pill-muted {
+    background: rgb(255 255 255 / 7%);
+    color: rgb(247 251 251 / 74%);
+  }
+
+  .wallet-group {
+    background: rgb(2 5 6 / 34%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 4%),
+      inset 0 -1px 0 rgb(0 0 0 / 18%);
+  }
+
+  .wallet-asset-row {
+    background: rgb(255 255 255 / 4%);
+  }
+
+  .wallet-asset-row:hover {
+    background: rgb(169 244 255 / 6%);
+  }
+
   .terminal-card [class*="bg-emerald"],
   .terminal-card [class*="bg-green"] {
     background-color: var(--mint);

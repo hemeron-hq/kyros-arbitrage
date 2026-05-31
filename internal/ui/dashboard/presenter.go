@@ -85,6 +85,15 @@ func metrics(model live.Model) shared.Metrics {
 func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 	snapshots := h.marketStore.Snapshot()
 	projection := market.Project(snapshots, now)
+	metricsSnapshot := h.metrics.Snapshot(now, projection.Feeds)
+	feedMetrics := make(map[string]speed.FeedRow, len(metricsSnapshot.Feeds))
+	for _, row := range metricsSnapshot.Feeds {
+		feedMetrics[feedMetricKey(row.Exchange, row.Market)] = speed.FeedRow{
+			AgeP50:     formatMillis(row.FeedAgeP50MS),
+			AgeP95:     formatMillis(row.FeedAgeP95MS),
+			UpdateRate: formatRate(row.UpdateRate),
+		}
+	}
 	rows := make([]live.FeedRow, 0, len(projection.Feeds))
 	liveFeeds := 0
 	staleFeeds := 0
@@ -95,6 +104,7 @@ func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 		if feedRow.Status == exchange.StatusStale || feedRow.Status == exchange.StatusError {
 			staleFeeds++
 		}
+		metric := feedMetrics[feedMetricKey(feedRow.Exchange, feedRow.Market)]
 		rows = append(rows, live.FeedRow{
 			Exchange:    titleCase(string(feedRow.Exchange)),
 			Market:      feedRow.Market,
@@ -107,6 +117,9 @@ func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 			AskSize:     displayBaseString(feedRow.AskSize),
 			Levels:      strconv.Itoa(feedRow.Levels),
 			Age:         displayMillis(feedRow.AgeMS),
+			AgeP50:      displayMetricValue(metric.AgeP50),
+			AgeP95:      displayMetricValue(metric.AgeP95),
+			UpdateRate:  displayMetricValue(metric.UpdateRate),
 			Latency:     displayMillis(feedRow.LatencyMS),
 			Sequence:    displaySequence(feedRow.Sequence),
 			Message:     feedRow.Message,
@@ -117,20 +130,22 @@ func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 	opportunities := make([]live.OpportunityRow, 0, len(decisionSnapshot.Opportunities))
 	for _, opportunity := range decisionSnapshot.Opportunities {
 		opportunities = append(opportunities, live.OpportunityRow{
-			Route:       displayRoute(opportunity.BuyExchange, opportunity.SellExchange),
-			Market:      displayMarket(opportunity.Market),
-			Size:        displayBase(opportunity.BaseSize),
-			GrossPnl:    displaySignedQuote(opportunity.GrossProfit),
-			GrossBPS:    displaySignedBPS(opportunity.GrossBPS),
-			Fees:        displayQuote(opportunity.TradingFees),
-			Slippage:    displayQuote(opportunity.SlippageCost),
-			Latency:     displayQuote(opportunity.LatencyPenalty),
-			Rebalance:   displayQuote(opportunity.RebalanceCost),
-			CostStack:   displayCostStack(opportunity),
-			ExpectedNet: displaySignedQuote(opportunity.ExpectedNetProfit),
-			NetBPS:      displaySignedBPS(opportunity.ExpectedNetBPS),
-			Decision:    string(opportunity.Decision),
-			Reason:      opportunity.ReasonCode,
+			Route:         displayRoute(opportunity.BuyExchange, opportunity.SellExchange),
+			Market:        displayMarket(opportunity.Market),
+			Size:          displayBase(opportunity.BaseSize),
+			GrossPnl:      displaySignedQuote(opportunity.GrossProfit),
+			GrossBPS:      displaySignedBPS(opportunity.GrossBPS),
+			Fees:          displayQuote(opportunity.TradingFees),
+			Slippage:      displayQuote(opportunity.SlippageCost),
+			Latency:       displayQuote(opportunity.LatencyPenalty),
+			Rebalance:     displayQuote(opportunity.RebalanceCost),
+			CostStack:     displayCostStack(opportunity),
+			ExpectedNet:   displaySignedQuote(opportunity.ExpectedNetProfit),
+			NetBPS:        displaySignedBPS(opportunity.ExpectedNetBPS),
+			Decision:      string(opportunity.Decision),
+			DecisionClass: decisionClass(string(opportunity.Decision)),
+			ReasonLabel:   displayReasonLabel(opportunity.ReasonCode),
+			Reason:        opportunity.ReasonCode,
 		})
 	}
 	termsRows := make([]live.TermsSourceRow, 0, len(decisionSnapshot.TermsHealth))
@@ -164,6 +179,7 @@ func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 		OpportunityRows: opportunities,
 		TermsRows:       termsRows,
 		BalanceRows:     balanceRows,
+		BalanceGroups:   balanceGroups(balanceRows),
 		History:         h.historyView(ctx),
 		LiveFeeds:       liveFeeds,
 		StaleFeeds:      staleFeeds,
@@ -444,6 +460,19 @@ func statusClass(status exchange.FeedStatus) string {
 	}
 }
 
+func decisionClass(decision string) string {
+	switch strings.ToLower(decision) {
+	case "execute":
+		return "decision-pill-execute"
+	case "wait":
+		return "decision-pill-wait"
+	case "skip":
+		return "decision-pill-skip"
+	default:
+		return "decision-pill-muted"
+	}
+}
+
 func riskStatusClass(status risk.Status) string {
 	switch status {
 	case risk.StatusNormal:
@@ -455,6 +484,50 @@ func riskStatusClass(status risk.Status) string {
 	default:
 		return "bg-muted-foreground"
 	}
+}
+
+func feedMetricKey(exchangeID exchange.ID, market string) string {
+	return string(exchangeID) + "|" + market
+}
+
+func displayMetricValue(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
+func displayReasonLabel(reason string) string {
+	if reason == "" {
+		return "review"
+	}
+	value := reason
+	for _, prefix := range []string{"EXECUTED_", "SKIP_", "WAITING_", "WAIT_"} {
+		value = strings.TrimPrefix(value, prefix)
+	}
+	value = strings.ToLower(strings.ReplaceAll(value, "_", " "))
+	if len(value) > 28 {
+		return strings.TrimSpace(value[:28])
+	}
+	return value
+}
+
+func balanceGroups(rows []live.BalanceRow) []live.BalanceGroup {
+	groups := make([]live.BalanceGroup, 0)
+	indexes := make(map[string]int)
+	for _, row := range rows {
+		index, ok := indexes[row.Exchange]
+		if !ok {
+			index = len(groups)
+			indexes[row.Exchange] = index
+			groups = append(groups, live.BalanceGroup{Exchange: row.Exchange})
+		}
+		groups[index].Assets = append(groups[index].Assets, live.BalanceAssetRow{
+			Asset:  row.Asset,
+			Amount: row.Amount,
+		})
+	}
+	return groups
 }
 
 func displayCircuitState(open bool) string {

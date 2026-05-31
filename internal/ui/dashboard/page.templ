@@ -5,7 +5,6 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/historic"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/live"
 	riskui "github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/risk"
-	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/speed"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/shared"
 	"github.com/templui/templui/components/badge"
 	"github.com/templui/templui/components/icon"
@@ -37,22 +36,22 @@ templ Page(model Model) {
 							@icon.Radar(icon.Props{Class: "size-4"})
 						</div>
 						<div class="min-w-0 space-y-2">
-						<div class="flex flex-wrap items-center gap-2">
-							@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Class: "terminal-badge"}) {
-								@icon.Activity(icon.Props{Class: "size-3"})
-								Realtime feeds
-							}
-							@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
-								BTC/USDT + BTC/USD
-							}
+							<div class="flex flex-wrap items-center gap-2">
+								@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Class: "terminal-badge"}) {
+									@icon.Activity(icon.Props{Class: "size-3"})
+									Realtime feeds
+								}
+								@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+									BTC/USDT + BTC/USD
+								}
+							</div>
+							<div>
+								<h1 class="text-2xl font-semibold tracking-normal sm:text-3xl">Kyros Arbitrage</h1>
+								<p class="max-w-2xl text-sm text-muted-foreground">
+									Live order books, net profitability scoring, and autonomous execution.
+								</p>
+							</div>
 						</div>
-						<div>
-							<h1 class="text-2xl font-semibold tracking-normal sm:text-3xl">Kyros Arbitrage</h1>
-							<p class="max-w-2xl text-sm text-muted-foreground">
-								Live order books, net profitability scoring, and autonomous execution.
-							</p>
-						</div>
-					</div>
 					</div>
 					<div class="flex shrink-0 flex-col items-start gap-2 rounded-lg bg-white/[0.055] px-3 py-2 text-xs text-muted-foreground md:items-end">
 						<div class="flex items-center gap-2">
@@ -88,15 +87,14 @@ templ Page(model Model) {
 					@tabs.Content(tabs.ContentProps{Value: "overview", IsActive: model.OverviewActive}) {
 						<section class="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
 							<div class="min-w-0">
-								@live.Dashboard(model.Live)
-								</div>
-								<div class="min-w-0 xl:sticky xl:top-3">
-									@live.BalanceCard(model.Live.BalanceRows)
-									@speed.Panel(model.Speed)
-									@riskui.Panel(model.Risk)
-								</div>
-							</section>
-						}
+								@live.Dashboard(model.Live, model.Speed)
+							</div>
+							<div class="min-w-0 xl:sticky xl:top-3">
+								@riskui.Panel(model.Risk)
+								@live.BalanceCard(model.Live.BalanceGroups)
+							</div>
+						</section>
+					}
 					@tabs.Content(tabs.ContentProps{Value: "connections", IsActive: model.ExchangesActive}) {
 						@exchanges.Dashboard(model.Exchanges)
 					}

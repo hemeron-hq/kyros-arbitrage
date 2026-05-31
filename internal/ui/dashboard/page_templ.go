@@ -13,7 +13,6 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/historic"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/live"
 	riskui "github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/risk"
-	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/speed"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/shared"
 	"github.com/templui/templui/components/badge"
 	"github.com/templui/templui/components/icon"
@@ -64,7 +63,7 @@ func Page(model Model) templ.Component {
 			StaleFeeds: model.Live.StaleFeeds,
 		}))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 31, Col: 6}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 30, Col: 6}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {
@@ -159,7 +158,7 @@ func Page(model Model) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(model.Heartbeat.StatusLabel)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 60, Col: 78}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 59, Col: 78}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -172,7 +171,7 @@ func Page(model Model) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(model.Heartbeat.ServerTitle)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 64, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 63, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 		if templ_7745c5c3_Err != nil {
@@ -185,7 +184,7 @@ func Page(model Model) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(model.Heartbeat.ServerTime)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 64, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 63, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -198,7 +197,7 @@ func Page(model Model) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(model.Heartbeat.Uptime)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 65, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 64, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -211,7 +210,7 @@ func Page(model Model) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(model.StartedAt)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 66, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/dashboard/page.templ`, Line: 65, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -361,7 +360,7 @@ func Page(model Model) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = live.Dashboard(model.Live).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = live.Dashboard(model.Live, model.Speed).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -369,15 +368,11 @@ func Page(model Model) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = live.BalanceCard(model.Live.BalanceRows).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = speed.Panel(model.Speed).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
 				templ_7745c5c3_Err = riskui.Panel(model.Risk).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = live.BalanceCard(model.Live.BalanceGroups).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
