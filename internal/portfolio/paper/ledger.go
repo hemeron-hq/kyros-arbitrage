@@ -23,8 +23,14 @@ func NewLedger() *Ledger {
 		balances: make(map[exchange.ID]map[string]decimal.Decimal),
 		sources:  make(map[exchange.ID]terms.Source),
 	}
-	ledger.Seed(exchange.Binance, terms.FallbackBalances(), terms.SourceFallback)
-	ledger.Seed(exchange.Kraken, terms.FallbackBalances(), terms.SourceFallback)
+	seen := make(map[exchange.ID]struct{})
+	for _, binding := range exchange.DefaultBindings() {
+		if _, ok := seen[binding.Exchange]; ok {
+			continue
+		}
+		seen[binding.Exchange] = struct{}{}
+		ledger.Seed(binding.Exchange, terms.FallbackBalances(), terms.SourceFallback)
+	}
 	return ledger
 }
 
@@ -47,16 +53,22 @@ func (l *Ledger) SeedAuthenticatedOnce(snapshot terms.Snapshot) {
 	if l.sources[snapshot.Exchange] == terms.SourceAuthenticated {
 		return
 	}
-	l.seedLocked(snapshot.Exchange, snapshot.Balances, snapshot.Source, true)
+	l.seedLocked(
+		snapshot.Exchange,
+		terms.MergeBalanceFloors(snapshot.Balances, terms.FallbackBalances()),
+		snapshot.Source,
+		true,
+	)
 }
 
 func (l *Ledger) Balance(exchangeID exchange.ID, asset string) decimal.Decimal {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	if l.balances[exchangeID] == nil {
-		return decimal.Zero
+	balances := l.balances[exchangeID]
+	if balances == nil {
+		return terms.FallbackBalances()[asset]
 	}
-	return l.balances[exchangeID][asset]
+	return balances[asset]
 }
 
 func (l *Ledger) Balances() []portfolio.BalanceRow {

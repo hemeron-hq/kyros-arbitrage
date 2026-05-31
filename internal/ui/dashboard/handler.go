@@ -1,7 +1,9 @@
 package dashboard
 
 import (
+	"bytes"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/hemeron-hq/kyros-arbitrage/internal/arbitrage"
@@ -63,10 +65,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := Page(h.model(r.Context(), 0, time.Now())).Render(r.Context(), w); err != nil {
-		http.Error(w, "render page", http.StatusInternalServerError)
+	var out bytes.Buffer
+	if err := Page(h.model(r.Context(), 0, time.Now(), pageOptions(r))).Render(r.Context(), &out); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = out.WriteTo(w)
 }
 
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
@@ -113,11 +118,12 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks int, now time.Time) bool {
-	model := h.model(sse.Context(), ticks, now)
+	model := h.model(sse.Context(), ticks, now, PageOptions{})
 	signals := Signals{
 		Connected:  model.Heartbeat.Connected,
 		ServerTime: model.Heartbeat.ServerTime,
 		Ticks:      model.Heartbeat.Ticks,
+		Uptime:     model.Heartbeat.Uptime,
 		Streaming:  false,
 		LiveFeeds:  model.Live.LiveFeeds,
 		StaleFeeds: model.Live.StaleFeeds,
@@ -129,13 +135,13 @@ func (h *Handler) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks i
 	if err := sse.PatchElementTempl(shared.MetricStrip(model.Metrics)); err != nil {
 		return false
 	}
-	if err := sse.PatchElementTempl(HeartbeatPanel(model.Heartbeat)); err != nil {
-		return false
-	}
 	if err := sse.PatchElementTempl(speed.Panel(model.Speed)); err != nil {
 		return false
 	}
 	if err := sse.PatchElementTempl(riskui.Panel(model.Risk)); err != nil {
+		return false
+	}
+	if err := sse.PatchElementTempl(live.BalanceCard(model.Live.BalanceRows)); err != nil {
 		return false
 	}
 	if err := sse.PatchElementTempl(live.Dashboard(model.Live)); err != nil {
@@ -146,4 +152,31 @@ func (h *Handler) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks i
 	}
 
 	return true
+}
+
+func pageOptions(r *http.Request) PageOptions {
+	query := r.URL.Query()
+	tab := query.Get("tab")
+	if tab != "connections" && tab != "historic" {
+		tab = "overview"
+	}
+	limit := parseInt64(query.Get("history_limit"), history.DefaultPageLimit)
+	offset := parseInt64(query.Get("history_offset"), 0)
+	limit, offset = history.NormalizePage(limit, offset)
+	return PageOptions{
+		ActiveTab:     tab,
+		HistoryLimit:  limit,
+		HistoryOffset: offset,
+	}
+}
+
+func parseInt64(value string, fallback int64) int64 {
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

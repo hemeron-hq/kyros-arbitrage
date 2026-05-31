@@ -166,10 +166,34 @@ func FallbackTransferFees(exchangeID exchange.ID) exchange.TransferFees {
 
 func FallbackBalances() map[string]decimal.Decimal {
 	return map[string]decimal.Decimal{
-		"BTC":  decimal.MustNew(25, 2),
-		"USDT": decimal.MustNew(25000, 0),
-		"USD":  decimal.MustNew(25000, 0),
+		"BTC":  decimal.MustNew(2, 0),
+		"USDT": decimal.MustNew(200000, 0),
+		"USD":  decimal.MustNew(200000, 0),
 	}
+}
+
+// MergeBalanceFloors returns a copy of floor with any higher authenticated amounts applied.
+// Paper trading uses this so real wallet reads cannot shrink below the demo allocation.
+func MergeBalanceFloors(authenticated map[string]decimal.Decimal, floor map[string]decimal.Decimal) map[string]decimal.Decimal {
+	merged := cloneBalanceMap(floor)
+	for asset, value := range authenticated {
+		if !value.IsPos() {
+			continue
+		}
+		existing, ok := merged[asset]
+		if !ok || value.Cmp(existing) > 0 {
+			merged[asset] = value
+		}
+	}
+	return merged
+}
+
+func cloneBalanceMap(values map[string]decimal.Decimal) map[string]decimal.Decimal {
+	clone := make(map[string]decimal.Decimal, len(values))
+	for asset, value := range values {
+		clone[asset] = value
+	}
+	return clone
 }
 
 func defaultMarket(exchangeID exchange.ID) exchange.Market {

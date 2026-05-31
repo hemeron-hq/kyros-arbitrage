@@ -1,12 +1,14 @@
 package arbitrage
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/govalues/decimal"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio/paper"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 )
 
@@ -78,6 +80,26 @@ func TestEvaluateKeepsUSDAndUSDTMarketsSeparate(t *testing.T) {
 				t.Fatalf("USD route crossed into USDT exchange: %+v", opportunity)
 			}
 		}
+	}
+}
+
+func TestEvaluateSkipsWhenRiskCircuitOpen(t *testing.T) {
+	now := time.Now()
+	controller, err := risk.NewController(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.Halt(risk.ReasonDrawdown, "session drawdown exceeded")
+	engine := NewEngine(terms.NewStore(now), paper.NewLedger(), controller)
+	snapshots := profitableSnapshots(now, "100", "150")
+
+	engine.Evaluate(snapshots, now)
+	result := engine.Evaluate(snapshots, now.Add(time.Millisecond))
+	if len(result.Opportunities) == 0 {
+		t.Fatal("expected opportunities")
+	}
+	if result.Opportunities[0].Decision != DecisionSkip || result.Opportunities[0].ReasonCode != risk.ReasonCircuitOpen {
+		t.Fatalf("expected circuit open skip, got %s/%s", result.Opportunities[0].Decision, result.Opportunities[0].ReasonCode)
 	}
 }
 

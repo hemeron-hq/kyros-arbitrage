@@ -203,6 +203,201 @@ func (q *Queries) ListExecutionNetProfits(ctx context.Context) ([]string, error)
 	return items, nil
 }
 
+const listExecutionsPage = `-- name: ListExecutionsPage :many
+SELECT
+  opportunity_id,
+  executed_at,
+  market,
+  buy_exchange,
+  sell_exchange,
+  base_size,
+  buy_notional,
+  sell_notional,
+  buy_fee,
+  sell_fee,
+  latency_penalty,
+  rebalance_cost,
+  net_profit,
+  terms_source
+FROM executions
+ORDER BY executed_at DESC, id DESC
+LIMIT ? OFFSET ?
+`
+
+type ListExecutionsPageParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+type ListExecutionsPageRow struct {
+	OpportunityID  string `json:"opportunity_id"`
+	ExecutedAt     string `json:"executed_at"`
+	Market         string `json:"market"`
+	BuyExchange    string `json:"buy_exchange"`
+	SellExchange   string `json:"sell_exchange"`
+	BaseSize       string `json:"base_size"`
+	BuyNotional    string `json:"buy_notional"`
+	SellNotional   string `json:"sell_notional"`
+	BuyFee         string `json:"buy_fee"`
+	SellFee        string `json:"sell_fee"`
+	LatencyPenalty string `json:"latency_penalty"`
+	RebalanceCost  string `json:"rebalance_cost"`
+	NetProfit      string `json:"net_profit"`
+	TermsSource    string `json:"terms_source"`
+}
+
+func (q *Queries) ListExecutionsPage(ctx context.Context, arg ListExecutionsPageParams) ([]ListExecutionsPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listExecutionsPage, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExecutionsPageRow
+	for rows.Next() {
+		var i ListExecutionsPageRow
+		if err := rows.Scan(
+			&i.OpportunityID,
+			&i.ExecutedAt,
+			&i.Market,
+			&i.BuyExchange,
+			&i.SellExchange,
+			&i.BaseSize,
+			&i.BuyNotional,
+			&i.SellNotional,
+			&i.BuyFee,
+			&i.SellFee,
+			&i.LatencyPenalty,
+			&i.RebalanceCost,
+			&i.NetProfit,
+			&i.TermsSource,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpportunitiesPage = `-- name: ListOpportunitiesPage :many
+SELECT
+  opportunity_id,
+  observed_at,
+  market,
+  buy_exchange,
+  sell_exchange,
+  base_size,
+  buy_notional,
+  sell_notional,
+  gross_profit,
+  gross_bps,
+  buy_fee,
+  sell_fee,
+  trading_fees,
+  trading_fee_bps,
+  slippage_cost,
+  slippage_bps,
+  latency_penalty,
+  latency_penalty_bps,
+  rebalance_cost,
+  expected_net_profit,
+  expected_net_bps,
+  decision,
+  reason_code,
+  terms_source,
+  partial
+FROM opportunities
+ORDER BY observed_at DESC, id DESC
+LIMIT ? OFFSET ?
+`
+
+type ListOpportunitiesPageParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+type ListOpportunitiesPageRow struct {
+	OpportunityID     string `json:"opportunity_id"`
+	ObservedAt        string `json:"observed_at"`
+	Market            string `json:"market"`
+	BuyExchange       string `json:"buy_exchange"`
+	SellExchange      string `json:"sell_exchange"`
+	BaseSize          string `json:"base_size"`
+	BuyNotional       string `json:"buy_notional"`
+	SellNotional      string `json:"sell_notional"`
+	GrossProfit       string `json:"gross_profit"`
+	GrossBps          string `json:"gross_bps"`
+	BuyFee            string `json:"buy_fee"`
+	SellFee           string `json:"sell_fee"`
+	TradingFees       string `json:"trading_fees"`
+	TradingFeeBps     string `json:"trading_fee_bps"`
+	SlippageCost      string `json:"slippage_cost"`
+	SlippageBps       string `json:"slippage_bps"`
+	LatencyPenalty    string `json:"latency_penalty"`
+	LatencyPenaltyBps string `json:"latency_penalty_bps"`
+	RebalanceCost     string `json:"rebalance_cost"`
+	ExpectedNetProfit string `json:"expected_net_profit"`
+	ExpectedNetBps    string `json:"expected_net_bps"`
+	Decision          string `json:"decision"`
+	ReasonCode        string `json:"reason_code"`
+	TermsSource       string `json:"terms_source"`
+	Partial           int64  `json:"partial"`
+}
+
+func (q *Queries) ListOpportunitiesPage(ctx context.Context, arg ListOpportunitiesPageParams) ([]ListOpportunitiesPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOpportunitiesPage, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpportunitiesPageRow
+	for rows.Next() {
+		var i ListOpportunitiesPageRow
+		if err := rows.Scan(
+			&i.OpportunityID,
+			&i.ObservedAt,
+			&i.Market,
+			&i.BuyExchange,
+			&i.SellExchange,
+			&i.BaseSize,
+			&i.BuyNotional,
+			&i.SellNotional,
+			&i.GrossProfit,
+			&i.GrossBps,
+			&i.BuyFee,
+			&i.SellFee,
+			&i.TradingFees,
+			&i.TradingFeeBps,
+			&i.SlippageCost,
+			&i.SlippageBps,
+			&i.LatencyPenalty,
+			&i.LatencyPenaltyBps,
+			&i.RebalanceCost,
+			&i.ExpectedNetProfit,
+			&i.ExpectedNetBps,
+			&i.Decision,
+			&i.ReasonCode,
+			&i.TermsSource,
+			&i.Partial,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentExecutions = `-- name: ListRecentExecutions :many
 SELECT
   opportunity_id,
@@ -290,13 +485,21 @@ SELECT
   buy_notional,
   sell_notional,
   gross_profit,
+  gross_bps,
+  buy_fee,
+  sell_fee,
   trading_fees,
+  trading_fee_bps,
   slippage_cost,
+  slippage_bps,
   latency_penalty,
+  latency_penalty_bps,
   rebalance_cost,
   expected_net_profit,
+  expected_net_bps,
   decision,
   reason_code,
+  terms_source,
   partial
 FROM opportunities
 ORDER BY observed_at DESC, id DESC
@@ -313,13 +516,21 @@ type ListRecentOpportunitiesRow struct {
 	BuyNotional       string `json:"buy_notional"`
 	SellNotional      string `json:"sell_notional"`
 	GrossProfit       string `json:"gross_profit"`
+	GrossBps          string `json:"gross_bps"`
+	BuyFee            string `json:"buy_fee"`
+	SellFee           string `json:"sell_fee"`
 	TradingFees       string `json:"trading_fees"`
+	TradingFeeBps     string `json:"trading_fee_bps"`
 	SlippageCost      string `json:"slippage_cost"`
+	SlippageBps       string `json:"slippage_bps"`
 	LatencyPenalty    string `json:"latency_penalty"`
+	LatencyPenaltyBps string `json:"latency_penalty_bps"`
 	RebalanceCost     string `json:"rebalance_cost"`
 	ExpectedNetProfit string `json:"expected_net_profit"`
+	ExpectedNetBps    string `json:"expected_net_bps"`
 	Decision          string `json:"decision"`
 	ReasonCode        string `json:"reason_code"`
+	TermsSource       string `json:"terms_source"`
 	Partial           int64  `json:"partial"`
 }
 
@@ -342,13 +553,21 @@ func (q *Queries) ListRecentOpportunities(ctx context.Context, limit int64) ([]L
 			&i.BuyNotional,
 			&i.SellNotional,
 			&i.GrossProfit,
+			&i.GrossBps,
+			&i.BuyFee,
+			&i.SellFee,
 			&i.TradingFees,
+			&i.TradingFeeBps,
 			&i.SlippageCost,
+			&i.SlippageBps,
 			&i.LatencyPenalty,
+			&i.LatencyPenaltyBps,
 			&i.RebalanceCost,
 			&i.ExpectedNetProfit,
+			&i.ExpectedNetBps,
 			&i.Decision,
 			&i.ReasonCode,
+			&i.TermsSource,
 			&i.Partial,
 		); err != nil {
 			return nil, err

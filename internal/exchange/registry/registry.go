@@ -3,6 +3,9 @@ package registry
 import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/binance"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/bitfinex"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/coinbase"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/gemini"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/kraken"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/publicfeed"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/platform/config"
@@ -21,14 +24,14 @@ func New(cfg config.Config) Registry {
 	marketProviders := map[exchange.ID]exchange.MarketDataProvider{
 		exchange.Binance:  binanceProvider,
 		exchange.Kraken:   krakenProvider,
-		exchange.Coinbase: publicfeed.NewCoinbase(),
+		exchange.Coinbase: coinbase.New(),
 		exchange.OKX:      publicfeed.NewOKX(),
 		exchange.Bybit:    publicfeed.NewBybit(),
-		exchange.Bitfinex: publicfeed.NewBitfinex(),
+		exchange.Bitfinex: bitfinex.New(),
 		exchange.KuCoin:   publicfeed.NewKuCoin(),
 		exchange.Gate:     publicfeed.NewGate(),
 		exchange.Bitstamp: publicfeed.NewBitstamp(),
-		exchange.Gemini:   publicfeed.NewGemini(),
+		exchange.Gemini:   gemini.New(),
 	}
 	termsClients := map[exchange.ID]exchange.TermsClient{
 		exchange.Binance: binanceProvider,

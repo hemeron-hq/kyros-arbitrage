@@ -19,15 +19,6 @@ func TestNewExchangeWebSocketParsers(t *testing.T) {
 		ask      string
 	}{
 		{
-			name:     "coinbase",
-			parser:   newCoinbaseParser(),
-			binding:  testBinding(exchange.Coinbase, "BTC/USD", "BTC-USD"),
-			payload:  `{"channel":"l2_data","timestamp":"2026-05-31T12:00:00.100Z","events":[{"type":"snapshot","product_id":"BTC-USD","updates":[{"side":"bid","price_level":"100","new_quantity":"1","event_time":"2026-05-31T12:00:00Z"},{"side":"offer","price_level":"101","new_quantity":"2","event_time":"2026-05-31T12:00:00Z"}]}]}`,
-			exchange: exchange.Coinbase,
-			bid:      "100",
-			ask:      "101",
-		},
-		{
 			name:     "okx",
 			parser:   okxParser{},
 			binding:  testBinding(exchange.OKX, "BTC/USDT", "BTC-USDT"),
@@ -42,15 +33,6 @@ func TestNewExchangeWebSocketParsers(t *testing.T) {
 			binding:  testBinding(exchange.Bybit, "BTC/USDT", "BTCUSDT"),
 			payload:  `{"topic":"orderbook.50.BTCUSDT","type":"snapshot","ts":1800000000000,"data":{"s":"BTCUSDT","b":[["100","1"]],"a":[["101","2"]],"u":10}}`,
 			exchange: exchange.Bybit,
-			bid:      "100",
-			ask:      "101",
-		},
-		{
-			name:     "bitfinex",
-			parser:   newBitfinexParser(),
-			binding:  testBinding(exchange.Bitfinex, "BTC/USD", "tBTCUSD"),
-			payload:  `[1,[[100,1,1],[101,1,-2]]]`,
-			exchange: exchange.Bitfinex,
 			bid:      "100",
 			ask:      "101",
 		},
@@ -81,15 +63,6 @@ func TestNewExchangeWebSocketParsers(t *testing.T) {
 			bid:      "100",
 			ask:      "101",
 		},
-		{
-			name:     "gemini",
-			parser:   newGeminiParser(),
-			binding:  testBinding(exchange.Gemini, "BTC/USD", "btcusd"),
-			payload:  `{"stream":"btcusd@depth10@100ms","data":{"E":1800000000000,"bids":[["100","1"]],"asks":[["101","2"]]}}`,
-			exchange: exchange.Gemini,
-			bid:      "100",
-			ask:      "101",
-		},
 	}
 
 	for _, tt := range tests {
@@ -109,7 +82,7 @@ func TestNewExchangeWebSocketParsers(t *testing.T) {
 			if bid.PriceText != tt.bid || ask.PriceText != tt.ask {
 				t.Fatalf("expected bid/ask %s/%s, got %s/%s", tt.bid, tt.ask, bid.PriceText, ask.PriceText)
 			}
-			if snapshot.ExchangeTime.IsZero() && tt.name != "bitfinex" {
+			if snapshot.ExchangeTime.IsZero() {
 				t.Fatal("expected venue timestamp")
 			}
 		})

@@ -1,41 +1,50 @@
 # Kyros Arbitrage
 
-Go SSR arbitrage dashboard with live public market feeds for the Bitcoin arbitrage challenge. The backend connects to Binance and Kraken BTC/USDT order books over WebSockets, keeps REST polling as fallback, normalizes the top 10 order-book levels, scores net-profitable paper routes, and streams projections to a Datastar dashboard.
+## Descripcion
 
-## Scope
+Kyros Arbitrage es una web app SSR en Go para el challenge de arbitraje de Bitcoin. El sistema consume order books publicos de multiples exchanges, normaliza los mejores niveles de compra y venta, detecta oportunidades de arbitraje en tiempo real y simula ejecuciones de paper trading con balances por exchange.
 
-- Live Binance and Kraken BTC/USDT L2 top 10 feeds.
-- WebSocket-first ingestion with polling fallback and stale-feed tracking.
-- Backend-owned market state; the UI only renders projections from Go services.
-- Net profitability after trading fees, book-depth slippage, latency penalty, and paper wallet limits.
-- SQLite-backed persistent history for detected opportunities, simulated fills, and accumulated P&L.
-- Per-exchange authenticated trading terms when read-only keys are present, with per-exchange-market fallback when keys are absent or rejected.
-- Autonomous paper execution only. There is no real order placement or real withdrawal execution.
+El motor evalua cada ruta neta de trading fees, slippage por profundidad del libro, penalizacion por latencia, costos de rebalanceo y limites de wallet. La interfaz muestra feeds en vivo, oportunidades detectadas, ejecuciones simuladas, P&L de sesion, P&L historico, salud de conexiones, reglas de trading por exchange y controles de riesgo con circuit breaker manualmente reiniciable.
 
-## Requirements
+La aplicacion no coloca ordenes reales. Las credenciales opcionales de Binance y Kraken se usan solo para leer fees, restricciones y balances cuando estan disponibles. Si no hay credenciales, Kyros usa perfiles fallback visibles en la UI para mantener una demo reproducible.
+
+## Stack tecnologico
+
+- **Backend:** Go, `net/http`, servicios concurrentes y estado de mercado en memoria.
+- **UI:** SSR con `templ`, componentes TemplUI, Datastar SSE para parches realtime.
+- **Market data:** WebSockets primero, REST polling como fallback, adaptadores por exchange.
+- **Exchanges:** Binance, Kraken, Coinbase, OKX, Bybit, Bitfinex, KuCoin, Gate.io, Bitstamp y Gemini.
+- **Persistencia:** SQLite con migraciones `goose` y queries generadas por `sqlc`.
+- **Estilos:** Tailwind CSS standalone CLI.
+- **Operacion local:** `task` para generacion, pruebas, CSS, ejecucion y Docker.
+- **Riesgo:** modos conservative/balanced/aggressive, reservas minimas, limites de spread/latencia/drawdown y circuit breaker sticky hasta reset manual.
+
+## Instrucciones de instalacion
+
+Requisitos:
 
 - Go 1.26.1
-- `sqlc`
-- `templ`
 - `task`
+- `templ`
+- `sqlc`
 - Tailwind CSS standalone CLI
 
-## Commands
+Instalacion sugerida en macOS:
 
 ```bash
-task sqlc
-task generate
-task css
-task check
-task run
+brew install go-task sqlc
+go install github.com/a-h/templ/cmd/templ@latest
 ```
 
-The app listens on `:8090` by default. Override with `PORT=8080 task run`.
+Instala Tailwind CSS standalone y asegurate de que el binario `tailwindcss` este disponible en tu `PATH`.
 
-Optional local environment files are supported through `.env`. Existing shell environment values take precedence.
-Use `.env.example` as the starting point for local overrides.
+Configura el entorno local:
 
-The only behavior-changing runtime configuration is:
+```bash
+cp .env.example .env
+```
+
+Variables disponibles:
 
 ```bash
 ENV=development
@@ -47,78 +56,79 @@ KRAKEN_API_KEY=
 KRAKEN_API_SECRET=
 ```
 
-When valid exchange keys are present, Kyros refreshes account-specific trading fees and balances in the background. When an exchange has no valid keys or lacks the required read permission, only that exchange market falls back to code-owned demo terms and wallet profiles. Fallback state is visible in the dashboard terms-source health panel and recorded with simulated decisions, so demo results do not claim authenticated terms for exchanges using fallback data.
+Las API keys son opcionales y deben tener permisos de solo lectura. Si se omiten o fallan, Kyros usa terminos fallback para la demo.
 
-The `Connections` tab is read-only. It visualizes the environment-configured exchange credential state and the execution terms currently feeding the paper engine: source, freshness, fee rates, market constraints, balances, and transfer-fee inputs. It does not accept API keys in the browser and does not place real orders.
+## Ejecucion local
 
-For local development with watchers:
+Genera codigo, CSS y ejecuta la suite:
+
+```bash
+task check
+```
+
+Corre la aplicacion:
+
+```bash
+task run
+```
+
+Abre la app en:
+
+```text
+http://localhost:8090
+```
+
+Endpoints utiles:
+
+- `/` dashboard SSR con feeds, oportunidades, balances, historial y controles de riesgo.
+- `/stream` stream SSE de actualizaciones realtime.
+- `/risk/mode` cambia el modo de riesgo.
+- `/risk/reset` reinicia el circuit breaker runtime.
+- `/healthz` healthcheck de proceso y feeds.
+- `/api/history` historial persistido de oportunidades y ejecuciones.
+- `/api/metrics` metricas de latencia de feeds y decision loop.
+
+Para desarrollo con watchers:
 
 ```bash
 task dev
 ```
 
-## Endpoints
-
-- `/` renders the SSR dashboard with feed status, net opportunities, paper wallets, terms-source health, execution-term details, and session P&L.
-- `/stream` opens a Datastar SSE stream with coalesced dashboard patches.
-- `/risk/mode` updates the persisted risk mode from the dashboard.
-- `/healthz` returns process and feed-health status.
-- `/api/history` returns persisted opportunity, simulated execution, and P&L history.
-- `/api/metrics` returns feed and decision-loop speed evidence for diagnostics.
-- `/assets/` serves CSS and the self-hosted Datastar client.
-
-## Package Layout
-
-- `cmd/server` is the thin process entrypoint.
-- `internal/exchange` owns exchange-neutral client contracts, account/fee/constraint types, and shared market/order data types.
-- `internal/exchange/{binance,kraken}` owns exchange-specific feed parsing, signed account/terms fetchers, wallet snapshots, and future order gateway behavior.
-- `internal/terms` owns trading terms aggregation, fallback profiles, freshness, source health, and background refresh orchestration.
-- `internal/market` owns market-data store, projections, and service lifecycle over exchange interfaces.
-- `internal/arbitrage` owns direct arbitrage depth walking, net profitability, latency penalties, ranking, and autonomous decisions.
-- `internal/history` owns persistent opportunity and execution history recording/reporting.
-- `internal/orders` is reserved for future order placement, cancellation, fills, and paper/real gateways.
-- `internal/portfolio` defines portfolio contracts; `internal/portfolio/paper` owns simulated exchange balances, fills, and session P&L.
-- `internal/platform/config` owns strongly typed environment configuration.
-- `internal/platform/database` owns application database opening, goose migration execution, and generated query access.
-- `internal/server` owns process-level HTTP routing, health/history diagnostics, and static assets.
-- `internal/ui` owns server-rendered templ views, dashboard route registration, Datastar SSE wiring, and dashboard view models split by UI domain.
-- `sql/` owns migrations, queries, and the sqlc config. `gen/db` contains sqlc-generated Go code and should not be edited by hand.
-
-## Market Data Defaults
-
-The first runtime defaults are code-owned: Binance and Kraken `BTC/USDT`, L2 top 10, `3s` stale threshold, `3s` polling fallback interval, `15m` terms refresh interval, `30m` authenticated terms TTL, `5m` latency-model window, fallback fee profiles, fallback paper wallet seeds, and proactive WebSocket recycling before 24 hours. Exchange binding defaults live with the shared exchange contracts, while service timing stays in code so runtime controls can be added deliberately later instead of expanding environment configuration early.
-
-The scoring hot path reads in-memory snapshots only. REST calls for authenticated fees, balances, withdrawal-fee metadata, and market constraints run in the background terms service and are never made while ranking a market-data update.
-
-Every simulated route subtracts trading fees, slippage, latency penalty, and a rebalance cost derived from exchange transfer-fee terms. Authenticated routes are skipped when required transfer-fee inputs are unavailable, while fallback demo terms use visible code-owned transfer-fee assumptions.
-
-## Wallet Model
-
-Kyros models one wallet per exchange, with independent balances per asset. A direct cross-exchange paper trade buys BTC on the cheaper exchange using that exchange's USDT wallet and sells BTC on the richer exchange using that other exchange's BTC wallet. The engine never assumes instant transfers between exchanges. If one side lacks balance, the route is either partially sized down or rejected.
-
-The current `internal/portfolio/paper` implementation is in-memory and seeded from authenticated balances when available, otherwise from visible fallback balances. Future real account implementations should satisfy the `internal/portfolio.Store` contract and live beside `paper` rather than replacing the arbitrage logic.
-
-## Persistent History
-
-Kyros writes each decision pass to the application SQLite database through sqlc-generated queries. The default local database URL is `file:./app.db`; override it with `DATABASE_URL`. Relative file URLs are resolved from the process working directory, so the repo Taskfile commands create `/app.db` at the repository root, not under `cmd/server`. The dashboard shows recent detected opportunities, simulated fills, stored counts, and accumulated historical P&L, while `/api/history` exposes the same data as JSON for demos and diagnostics.
-
-Database migrations live in `sql/migrations`, use goose annotations, and are applied by `internal/platform/database` on startup. Runtime commands should be started from the repository root so the migration directory is available at `sql/migrations`; the Docker image copies that directory into `/app/sql/migrations`. Query code is generated from `sql/queries` into `gen/db`.
-
-The application database is intentionally separate from the in-memory paper wallet. Restarting the app preserves persisted history and accumulated P&L reports, while the paper wallet still starts from authenticated or fallback balances.
-
-## Docker and Deployment
-
-Build and run the production image locally:
+Para Docker:
 
 ```bash
 task docker-build
 task docker-run
 ```
 
-The image listens on `PORT` and stores the application database at `/var/lib/app/app.db` by default. Mount `/var/lib/app` as a persistent volume in production:
+El contenedor escucha en `PORT` y usa `/var/lib/app/app.db` por defecto. Monta `/var/lib/app` como volumen si necesitas conservar el historial.
 
-```bash
-docker run --rm -p 8090:8090 -v database:/var/lib/app -e ENV=production kyros-arbitrage
-```
+## Capturas de pantalla
 
-`compose.yaml` runs the same container locally with a named volume mounted at `/var/lib/app`.
+### Overview realtime
+
+![Overview realtime](docs/screenshots/dashboard-overview.png)
+
+### Exchanges y terminos de ejecucion
+
+![Exchanges y terminos](docs/screenshots/dashboard-exchanges.png)
+
+### Historico persistido
+
+![Historico persistido](docs/screenshots/dashboard-history.png)
+
+## Arquitectura
+
+El hot path de scoring lee snapshots en memoria y evita llamadas REST mientras rankea rutas. Los feeds publicos actualizan el store de mercado; el decision loop evalua rutas directas por mercado, actualiza el ledger de paper trading y persiste oportunidades/ejecuciones en SQLite. La UI solo renderiza proyecciones del backend y recibe parches coalesced por SSE.
+
+Los costos se calculan antes de ejecutar una simulacion:
+
+- spread bruto entre ask y bid,
+- trading fees de compra y venta,
+- slippage por profundidad del order book,
+- penalizacion de latencia,
+- costo estimado de rebalanceo,
+- restricciones de min notional, min base, tick y step size,
+- balances disponibles por wallet.
+
+El circuit breaker abre automaticamente ante drawdown critico o fallo critico de ejecucion simulada. Mientras esta abierto, el motor rechaza nuevas oportunidades con `SKIP_RISK_CIRCUIT_OPEN` hasta que un operador use `Reset circuit` en la UI.

@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/govalues/decimal"
 )
@@ -13,11 +14,14 @@ type ModeStore interface {
 }
 
 type Controller struct {
-	mu      sync.RWMutex
-	store   ModeStore
-	mode    Mode
-	status  Status
-	reasons []string
+	mu         sync.RWMutex
+	store      ModeStore
+	mode       Mode
+	status     Status
+	reasons    []string
+	open       bool
+	openReason string
+	haltedAt   time.Time
 }
 
 func NewController(ctx context.Context, store ModeStore) (*Controller, error) {
@@ -49,20 +53,50 @@ func (c *Controller) SetMode(ctx context.Context, mode Mode) error {
 
 	c.mu.Lock()
 	c.mode = mode
-	c.status = StatusNormal
-	c.reasons = []string{"risk mode updated"}
+	if c.open {
+		c.status = StatusHalted
+		c.reasons = []string{"risk mode updated while circuit remains open", "manual reset required"}
+	} else {
+		c.status = StatusNormal
+		c.reasons = []string{"risk mode updated"}
+	}
 	c.mu.Unlock()
 	return nil
+}
+
+func (c *Controller) Reset() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.open = false
+	c.openReason = ""
+	c.haltedAt = time.Time{}
+	c.status = StatusNormal
+	c.reasons = []string{"circuit reset manually"}
+}
+
+func (c *Controller) Halt(reason string, reasons ...string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.openCircuitLocked(reason, reasons)
 }
 
 func (c *Controller) State() State {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return State{
-		Mode:       c.mode,
-		Status:     c.status,
-		Reasons:    append([]string(nil), c.reasons...),
-		Thresholds: ThresholdsFor(c.mode),
+		Mode:          c.mode,
+		Status:        c.status,
+		Reasons:       append([]string(nil), c.reasons...),
+		Thresholds:    ThresholdsFor(c.mode),
+		CircuitOpen:   c.open,
+		CircuitReason: c.openReason,
+		HaltedAt:      c.haltedAt,
 	}
 }
 
@@ -74,7 +108,35 @@ func (c *Controller) Evaluate(candidate Candidate) Decision {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	thresholds := ThresholdsFor(c.mode)
+	if c.open {
+		return c.openDecisionLocked()
+	}
+
+	decision := assessCandidate(candidate, ThresholdsFor(c.mode))
+	if decision.Status == StatusHalted {
+		c.openCircuitLocked(decision.Reason, decision.Reasons)
+		return decision
+	}
+	c.status = decision.Status
+	c.reasons = append([]string(nil), decision.Reasons...)
+	return decision
+}
+
+func (c *Controller) Preview(candidate Candidate) Decision {
+	if c == nil {
+		return Decision{Allowed: true, Status: StatusNormal}
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.open {
+		return c.openDecisionLocked()
+	}
+	return assessCandidate(candidate, ThresholdsFor(c.mode))
+}
+
+func assessCandidate(candidate Candidate, thresholds Thresholds) Decision {
 	status := StatusNormal
 	reason := ""
 	reasons := make([]string, 0, 4)
@@ -109,12 +171,38 @@ func (c *Controller) Evaluate(candidate Candidate) Decision {
 	if reason == "" {
 		reasons = append(reasons, "within risk thresholds")
 	}
-	c.status = status
-	c.reasons = append([]string(nil), reasons...)
 	return Decision{
 		Allowed: reason == "",
 		Status:  status,
 		Reason:  reason,
+		Reasons: reasons,
+	}
+}
+
+func (c *Controller) openCircuitLocked(reason string, reasons []string) {
+	if reason == "" {
+		reason = ReasonCircuitOpen
+	}
+	c.open = true
+	c.openReason = reason
+	c.haltedAt = time.Now()
+	c.status = StatusHalted
+	if len(reasons) == 0 {
+		reasons = []string{"circuit breaker opened"}
+	}
+	c.reasons = append([]string(nil), reasons...)
+	c.reasons = append(c.reasons, "manual reset required")
+}
+
+func (c *Controller) openDecisionLocked() Decision {
+	reasons := append([]string(nil), c.reasons...)
+	if len(reasons) == 0 {
+		reasons = []string{"circuit breaker open"}
+	}
+	return Decision{
+		Allowed: false,
+		Status:  StatusHalted,
+		Reason:  ReasonCircuitOpen,
 		Reasons: reasons,
 	}
 }

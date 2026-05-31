@@ -49,7 +49,7 @@ func (e *Engine) evaluate(snapshots []exchange.OrderBookSnapshot, now time.Time,
 	e.latency.Observe(snapshots, now)
 	e.seedActualBalances(now)
 
-	opportunities := e.findOpportunities(snapshots, now)
+	opportunities := e.findOpportunities(snapshots, now, execute)
 	sort.Slice(opportunities, func(i, j int) bool {
 		left := opportunities[i]
 		right := opportunities[j]
@@ -121,7 +121,7 @@ func (e *Engine) seedActualBalances(now time.Time) {
 	}
 }
 
-func (e *Engine) findOpportunities(snapshots []exchange.OrderBookSnapshot, now time.Time) []Opportunity {
+func (e *Engine) findOpportunities(snapshots []exchange.OrderBookSnapshot, now time.Time, execute bool) []Opportunity {
 	byMarket := make(map[string][]exchange.OrderBookSnapshot)
 	for _, snapshot := range snapshots {
 		if snapshot.Status != exchange.StatusLive || !snapshot.HasBook() {
@@ -137,7 +137,7 @@ func (e *Engine) findOpportunities(snapshots []exchange.OrderBookSnapshot, now t
 				if buy.Exchange == sell.Exchange {
 					continue
 				}
-				opportunity := e.evaluatePair(buy, sell, now)
+				opportunity := e.evaluatePair(buy, sell, now, execute)
 				opportunities = append(opportunities, opportunity)
 			}
 		}
@@ -154,7 +154,7 @@ func (e *Engine) findOpportunities(snapshots []exchange.OrderBookSnapshot, now t
 	return opportunities
 }
 
-func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot, now time.Time) Opportunity {
+func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot, now time.Time, execute bool) Opportunity {
 	market := buy.Market
 	opportunity := Opportunity{
 		ID:           opportunityID(buy, sell),
@@ -253,7 +253,7 @@ func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.Orde
 		opportunity.ReasonCode = ReasonNegativeNet
 		return opportunity
 	}
-	riskDecision := e.evaluateRisk(opportunity, quoteBalance, baseBalance)
+	riskDecision := e.evaluateRisk(opportunity, quoteBalance, baseBalance, execute)
 	if !riskDecision.Allowed {
 		opportunity.Decision = DecisionSkip
 		opportunity.ReasonCode = riskDecision.Reason
@@ -540,7 +540,7 @@ func transferFeeFor(snapshot terms.Snapshot, asset string) (decimal.Decimal, boo
 	return value, true
 }
 
-func (e *Engine) evaluateRisk(opportunity Opportunity, quoteBalance decimal.Decimal, baseBalance decimal.Decimal) risk.Decision {
+func (e *Engine) evaluateRisk(opportunity Opportunity, quoteBalance decimal.Decimal, baseBalance decimal.Decimal, execute bool) risk.Decision {
 	if e.riskController == nil {
 		return risk.Decision{Allowed: true}
 	}
@@ -556,7 +556,7 @@ func (e *Engine) evaluateRisk(opportunity Opportunity, quoteBalance decimal.Deci
 	if err != nil {
 		return risk.Decision{Allowed: false, Reason: risk.ReasonReserve}
 	}
-	return e.riskController.Evaluate(risk.Candidate{
+	candidate := risk.Candidate{
 		GrossBPS:          opportunity.GrossBPS,
 		LatencyPenaltyBPS: opportunity.LatencyPenaltyBPS,
 		SessionPNL:        e.ledger.Stats().SessionPNL,
@@ -564,7 +564,11 @@ func (e *Engine) evaluateRisk(opportunity Opportunity, quoteBalance decimal.Deci
 		BuyQuoteAfter:     quoteAfter,
 		SellBaseBalance:   baseBalance,
 		SellBaseAfter:     baseAfter,
-	})
+	}
+	if execute {
+		return e.riskController.Evaluate(candidate)
+	}
+	return e.riskController.Preview(candidate)
 }
 
 func (e *Engine) maxBaseByBalance(market exchange.Market, topAsk decimal.Decimal, buyExchange exchange.ID, sellExchange exchange.ID, buyFeeRate decimal.Decimal) (decimal.Decimal, bool) {
@@ -612,6 +616,9 @@ func (e *Engine) executeBest(opportunity *Opportunity, now time.Time) {
 		ExecutedAt:     now,
 	}
 	if !e.ledger.Apply(execution) {
+		if e.riskController != nil {
+			e.riskController.Halt(ReasonLedgerApplyFailed, "paper ledger rejected simulated execution")
+		}
 		opportunity.Decision = DecisionSkip
 		opportunity.ReasonCode = ReasonLedgerApplyFailed
 		return

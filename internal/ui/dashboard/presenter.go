@@ -10,29 +10,48 @@ import (
 	"github.com/govalues/decimal"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/arbitrage"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/history"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/market"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/exchanges"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/historic"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/live"
 	riskui "github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/speed"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/shared"
 )
 
-const displayTimeLayout = "Jan 2, 2006 15:04:05"
+const (
+	displayTimeLayout = "Jan 02 15:04:05"
+	compactTimeLayout = "Jan 02 15:04"
+	fullTimeLayout    = "2006-01-02 15:04:05 MST"
+)
 
-func (h *Handler) model(ctx context.Context, ticks int, now time.Time) Model {
+type PageOptions struct {
+	ActiveTab     string
+	HistoryLimit  int64
+	HistoryOffset int64
+}
+
+func (h *Handler) model(ctx context.Context, ticks int, now time.Time, options PageOptions) Model {
+	if options.ActiveTab == "" {
+		options.ActiveTab = "overview"
+	}
 	liveModel := h.liveModel(ctx, now)
 	return Model{
-		Title:     "Kyros Arbitrage",
-		StartedAt: displayTimestamp(h.startedAt),
-		Heartbeat: h.heartbeatView(ticks, now),
-		Metrics:   metrics(liveModel),
-		Live:      liveModel,
-		Speed:     h.speedView(now),
-		Risk:      h.riskView(),
-		Exchanges: h.exchangesView(now),
+		Title:           "Kyros Arbitrage",
+		StartedAt:       displayTimestamp(h.startedAt),
+		Heartbeat:       h.heartbeatView(ticks, now),
+		Metrics:         metrics(liveModel),
+		Live:            liveModel,
+		Speed:           h.speedView(now),
+		Risk:            h.riskView(),
+		Exchanges:       h.exchangesView(now),
+		Historic:        h.historicView(ctx, options.HistoryLimit, options.HistoryOffset),
+		OverviewActive:  options.ActiveTab == "overview",
+		ExchangesActive: options.ActiveTab == "connections",
+		HistoricActive:  options.ActiveTab == "historic",
 	}
 }
 
@@ -41,7 +60,8 @@ func (h *Handler) heartbeatView(ticks int, now time.Time) HeartbeatView {
 		Connected:   true,
 		StatusLabel: "Stream connected",
 		StatusClass: "bg-emerald-500",
-		ServerTime:  displayTimestamp(now),
+		ServerTime:  displayCompactTimestamp(now),
+		ServerTitle: displayFullTimestamp(now),
 		Ticks:       ticks,
 		TicksLabel:  strconv.Itoa(ticks),
 		Uptime:      time.Since(h.startedAt).Round(time.Second).String(),
@@ -101,11 +121,14 @@ func (h *Handler) liveModel(ctx context.Context, now time.Time) live.Model {
 			Market:      displayMarket(opportunity.Market),
 			Size:        displayBase(opportunity.BaseSize),
 			GrossPnl:    displaySignedQuote(opportunity.GrossProfit),
+			GrossBPS:    displaySignedBPS(opportunity.GrossBPS),
 			Fees:        displayQuote(opportunity.TradingFees),
 			Slippage:    displayQuote(opportunity.SlippageCost),
 			Latency:     displayQuote(opportunity.LatencyPenalty),
 			Rebalance:   displayQuote(opportunity.RebalanceCost),
+			CostStack:   displayCostStack(opportunity),
 			ExpectedNet: displaySignedQuote(opportunity.ExpectedNetProfit),
+			NetBPS:      displaySignedBPS(opportunity.ExpectedNetBPS),
 			Decision:    string(opportunity.Decision),
 			Reason:      opportunity.ReasonCode,
 		})
@@ -160,6 +183,10 @@ func (h *Handler) riskView() riskui.Model {
 		Status:             string(state.Status),
 		StatusClass:        riskStatusClass(state.Status),
 		Reasons:            state.Reasons,
+		CircuitState:       displayCircuitState(state.CircuitOpen),
+		CircuitReason:      displayCircuitReason(state.CircuitReason),
+		HaltedAt:           displayTimestamp(state.HaltedAt),
+		ResetVisible:       state.CircuitOpen,
 		MaxSpread:          displayBPS(state.Thresholds.MaxSpreadBPS),
 		MaxLatencyPenalty:  displayBPS(state.Thresholds.MaxLatencyPenaltyBPS),
 		MaxDrawdown:        displayQuote(state.Thresholds.MaxDrawdown),
@@ -283,25 +310,29 @@ func (h *Handler) historyView(ctx context.Context) live.HistoryView {
 	}
 	opportunities := make([]live.HistoryOpportunityRow, 0, len(report.Opportunities))
 	for _, row := range report.Opportunities {
+		observed, observedFull := displayHistoryTime(row.ObservedAt)
 		opportunities = append(opportunities, live.HistoryOpportunityRow{
-			Observed:    displayHistoryTimestamp(row.ObservedAt),
-			Route:       displayHistoryRoute(row.BuyExchange, row.SellExchange),
-			Market:      displayHistoryMarket(row.Market),
-			Size:        displayDecimalAsBase(row.BaseSize),
-			ExpectedNet: displaySignedDecimalAsQuote(row.ExpectedNetProfit),
-			Decision:    row.Decision,
-			Reason:      row.ReasonCode,
+			Observed:     observed,
+			ObservedFull: observedFull,
+			Route:        displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Market:       displayHistoryMarket(row.Market),
+			Size:         displayDecimalAsBase(row.BaseSize),
+			ExpectedNet:  displaySignedDecimalAsQuote(row.ExpectedNetProfit),
+			Decision:     row.Decision,
+			Reason:       row.ReasonCode,
 		})
 	}
 	executions := make([]live.HistoryExecutionRow, 0, len(report.Executions))
 	for _, row := range report.Executions {
+		executed, executedFull := displayHistoryTime(row.ExecutedAt)
 		executions = append(executions, live.HistoryExecutionRow{
-			Executed:    displayHistoryTimestamp(row.ExecutedAt),
-			Route:       displayHistoryRoute(row.BuyExchange, row.SellExchange),
-			Market:      displayHistoryMarket(row.Market),
-			Size:        displayDecimalAsBase(row.BaseSize),
-			NetProfit:   displaySignedDecimalAsQuote(row.NetProfit),
-			TermsSource: row.TermsSource,
+			Executed:     executed,
+			ExecutedFull: executedFull,
+			Route:        displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Market:       displayHistoryMarket(row.Market),
+			Size:         displayDecimalAsBase(row.BaseSize),
+			NetProfit:    displaySignedDecimalAsQuote(row.NetProfit),
+			TermsSource:  row.TermsSource,
 		})
 	}
 	return live.HistoryView{
@@ -310,6 +341,74 @@ func (h *Handler) historyView(ctx context.Context) live.HistoryView {
 		OpportunityCount: strconv.FormatInt(report.Summary.Opportunities, 10),
 		ExecutionCount:   strconv.FormatInt(report.Summary.Executions, 10),
 		TotalPnl:         displaySignedDecimalAsQuote(report.Summary.TotalPNL),
+		OpportunityRows:  opportunities,
+		ExecutionRows:    executions,
+	}
+}
+
+func (h *Handler) historicView(ctx context.Context, limit int64, offset int64) historic.Model {
+	reportCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	report, err := h.historyStore.Page(reportCtx, limit, offset)
+	if err != nil {
+		return historic.Model{
+			Path:   h.database.Path(),
+			Status: "history unavailable",
+		}
+	}
+	opportunities := make([]historic.OpportunityRow, 0, len(report.Opportunities))
+	for _, row := range report.Opportunities {
+		observed, observedFull := displayHistoryTime(row.ObservedAt)
+		opportunities = append(opportunities, historic.OpportunityRow{
+			Observed:          observed,
+			ObservedFull:      observedFull,
+			Route:             displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Market:            displayHistoryMarket(row.Market),
+			Size:              displayDecimalAsBase(row.BaseSize),
+			BuyNotional:       displayDecimalAsQuote(row.BuyNotional),
+			SellNotional:      displayDecimalAsQuote(row.SellNotional),
+			GrossProfit:       displaySignedDecimalAsQuote(row.GrossProfit),
+			GrossBPS:          displaySignedDecimalAsBPS(row.GrossBPS),
+			TradingFees:       displayDecimalAsQuote(row.TradingFees),
+			SlippageCost:      displayDecimalAsQuote(row.SlippageCost),
+			LatencyPenalty:    displayDecimalAsQuote(row.LatencyPenalty),
+			RebalanceCost:     displayDecimalAsQuote(row.RebalanceCost),
+			ExpectedNetProfit: displaySignedDecimalAsQuote(row.ExpectedNetProfit),
+			ExpectedNetBPS:    displaySignedDecimalAsBPS(row.ExpectedNetBPS),
+			Decision:          row.Decision,
+			Reason:            row.ReasonCode,
+			Partial:           displayBool(row.Partial),
+		})
+	}
+
+	executions := make([]historic.ExecutionRow, 0, len(report.Executions))
+	for _, row := range report.Executions {
+		executed, executedFull := displayHistoryTime(row.ExecutedAt)
+		executions = append(executions, historic.ExecutionRow{
+			Executed:       executed,
+			ExecutedFull:   executedFull,
+			Route:          displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Market:         displayHistoryMarket(row.Market),
+			Size:           displayDecimalAsBase(row.BaseSize),
+			BuyNotional:    displayDecimalAsQuote(row.BuyNotional),
+			SellNotional:   displayDecimalAsQuote(row.SellNotional),
+			BuyFee:         displayDecimalAsQuote(row.BuyFee),
+			SellFee:        displayDecimalAsQuote(row.SellFee),
+			LatencyPenalty: displayDecimalAsQuote(row.LatencyPenalty),
+			RebalanceCost:  displayDecimalAsQuote(row.RebalanceCost),
+			NetProfit:      displaySignedDecimalAsQuote(row.NetProfit),
+			TermsSource:    row.TermsSource,
+		})
+	}
+
+	return historic.Model{
+		Path:             report.Summary.Path,
+		Status:           "persisted",
+		OpportunityCount: strconv.FormatInt(report.Summary.Opportunities, 10),
+		ExecutionCount:   strconv.FormatInt(report.Summary.Executions, 10),
+		TotalPnl:         displaySignedDecimalAsQuote(report.Summary.TotalPNL),
+		Page:             historicPage(report.Pagination.Opportunities, report.Pagination.Executions),
 		OpportunityRows:  opportunities,
 		ExecutionRows:    executions,
 	}
@@ -358,6 +457,20 @@ func riskStatusClass(status risk.Status) string {
 	}
 }
 
+func displayCircuitState(open bool) string {
+	if open {
+		return "open"
+	}
+	return "armed"
+}
+
+func displayCircuitReason(reason string) string {
+	if reason == "" {
+		return "-"
+	}
+	return reason
+}
+
 func displayMillis(value *int64) string {
 	if value == nil {
 		return "-"
@@ -370,6 +483,20 @@ func displayTimestamp(value time.Time) string {
 		return "-"
 	}
 	return value.Local().Format(displayTimeLayout)
+}
+
+func displayCompactTimestamp(value time.Time) string {
+	if value.IsZero() {
+		return "-"
+	}
+	return value.Local().Format(compactTimeLayout)
+}
+
+func displayFullTimestamp(value time.Time) string {
+	if value.IsZero() {
+		return "-"
+	}
+	return value.Local().Format(fullTimeLayout)
 }
 
 func formatMillis(value int64) string {
@@ -419,6 +546,13 @@ func displaySignedQuote(value decimal.Decimal) string {
 	return displayQuote(value)
 }
 
+func displaySignedBPS(value decimal.Decimal) string {
+	if value.IsPos() {
+		return "+" + displayBPS(value)
+	}
+	return displayBPS(value)
+}
+
 func displayBase(value decimal.Decimal) string {
 	return trimTrailingZeros(fmt.Sprintf("%.8f", value))
 }
@@ -445,6 +579,14 @@ func displaySignedDecimalAsQuote(value string) string {
 		return "-"
 	}
 	return displaySignedQuote(parsed)
+}
+
+func displaySignedDecimalAsBPS(value string) string {
+	parsed, ok := parseDecimal(value)
+	if !ok {
+		return "-"
+	}
+	return displaySignedBPS(parsed)
 }
 
 func displayAssetAmount(asset string, value decimal.Decimal) string {
@@ -574,6 +716,17 @@ func displayHistoryTimestamp(value string) string {
 	return displayTimestamp(parsed)
 }
 
+func displayHistoryTime(value string) (string, string) {
+	if value == "" {
+		return "-", "-"
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return value, value
+	}
+	return displayCompactTimestamp(parsed), displayFullTimestamp(parsed)
+}
+
 func displayFresh(fresh bool) string {
 	if fresh {
 		return "fresh"
@@ -601,4 +754,50 @@ func bestNetState(opportunity arbitrage.Opportunity) string {
 		return "session best: " + opportunity.ReasonCode
 	}
 	return "session best: " + route + " / " + opportunity.ReasonCode
+}
+
+func displayCostStack(opportunity arbitrage.Opportunity) string {
+	return "fees " + displayQuote(opportunity.TradingFees) +
+		" / slip " + displayQuote(opportunity.SlippageCost) +
+		" / latency " + displayQuote(opportunity.LatencyPenalty) +
+		" / rebalance " + displayQuote(opportunity.RebalanceCost)
+}
+
+func displayBool(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
+}
+
+func historicPage(opportunities history.Page, executions history.Page) historic.PageView {
+	limit := opportunities.Limit
+	offset := opportunities.Offset
+	total := opportunities.Total
+	if executions.Total > total {
+		total = executions.Total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	start := int64(0)
+	if total > 0 {
+		start = offset + 1
+	}
+	prevOffset := offset - limit
+	if prevOffset < 0 {
+		prevOffset = 0
+	}
+	return historic.PageView{
+		Label:   fmt.Sprintf("%d-%d / %d", start, end, total),
+		PrevURL: historicURL(limit, prevOffset),
+		NextURL: historicURL(limit, offset+limit),
+		HasPrev: offset > 0,
+		HasNext: opportunities.HasNext || executions.HasNext,
+	}
+}
+
+func historicURL(limit int64, offset int64) string {
+	return fmt.Sprintf("/?tab=historic&history_limit=%d&history_offset=%d", limit, offset)
 }

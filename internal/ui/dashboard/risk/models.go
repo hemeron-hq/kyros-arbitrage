@@ -5,6 +5,10 @@ type Model struct {
 	Status             string
 	StatusClass        string
 	Reasons            []string
+	CircuitState       string
+	CircuitReason      string
+	HaltedAt           string
+	ResetVisible       bool
 	MaxSpread          string
 	MaxLatencyPenalty  string
 	MaxDrawdown        string

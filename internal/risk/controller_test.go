@@ -73,4 +73,23 @@ func TestControllerEvaluateModes(t *testing.T) {
 	if drawdown.Allowed || drawdown.Status != StatusHalted || drawdown.Reason != ReasonDrawdown {
 		t.Fatalf("expected drawdown halt, got allowed=%v status=%s reason=%s", drawdown.Allowed, drawdown.Status, drawdown.Reason)
 	}
+
+	open := controller.Evaluate(Candidate{
+		GrossBPS:          decimal.Zero,
+		LatencyPenaltyBPS: decimal.Zero,
+		SessionPNL:        decimal.Zero,
+		BuyQuoteBalance:   decimal.MustNew(1000, 0),
+		BuyQuoteAfter:     decimal.MustNew(900, 0),
+		SellBaseBalance:   decimal.MustNew(1, 0),
+		SellBaseAfter:     decimal.MustNew(9, 1),
+	})
+	if open.Allowed || open.Reason != ReasonCircuitOpen {
+		t.Fatalf("expected open circuit block, got allowed=%v reason=%s", open.Allowed, open.Reason)
+	}
+
+	controller.Reset()
+	reset := controller.State()
+	if reset.CircuitOpen || reset.Status != StatusNormal {
+		t.Fatalf("expected reset circuit, got open=%v status=%s", reset.CircuitOpen, reset.Status)
+	}
 }

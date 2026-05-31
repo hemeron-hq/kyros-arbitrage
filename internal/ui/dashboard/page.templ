@@ -2,12 +2,12 @@ package dashboard
 
 import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/exchanges"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/historic"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/live"
 	riskui "github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/speed"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/shared"
 	"github.com/templui/templui/components/badge"
-	"github.com/templui/templui/components/button"
 	"github.com/templui/templui/components/icon"
 	"github.com/templui/templui/components/tabs"
 )
@@ -24,6 +24,7 @@ templ Page(model Model) {
 					Connected: model.Heartbeat.Connected,
 					ServerTime: model.Heartbeat.ServerTime,
 					Ticks: model.Heartbeat.Ticks,
+					Uptime: model.Heartbeat.Uptime,
 					Streaming: false,
 					LiveFeeds: model.Live.LiveFeeds,
 					StaleFeeds: model.Live.StaleFeeds,
@@ -53,23 +54,17 @@ templ Page(model Model) {
 						</div>
 					</div>
 					</div>
-					<div class="flex items-center gap-3">
-						<div class="text-left text-xs text-muted-foreground md:text-right">
-							<div>Started</div>
-							<div class="font-mono text-foreground">{ model.StartedAt }</div>
+					<div class="flex shrink-0 flex-col items-start gap-2 rounded-lg bg-white/[0.055] px-3 py-2 text-xs text-muted-foreground md:items-end">
+						<div class="flex items-center gap-2">
+							<span class={ "size-2 rounded-full " + model.Heartbeat.StatusClass }></span>
+							<span class="font-medium text-foreground">{ model.Heartbeat.StatusLabel }</span>
+							<span class="font-mono">SSE</span>
 						</div>
-						@button.Button(button.Props{
-							Variant: button.VariantSecondary,
-							Class: "h-9 rounded-lg border-0 bg-foreground px-4 text-background shadow-none hover:bg-foreground/90",
-							Attributes: templ.Attributes{
-								"data-on:click": "@get('/stream')",
-								"data-indicator:streaming": "",
-								"data-attr:disabled": "$streaming",
-							},
-						}) {
-							@icon.RotateCcw(icon.Props{Class: "size-4"})
-							Reconnect
-						}
+						<div class="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono">
+							<span title={ model.Heartbeat.ServerTitle } data-text="$serverTime">{ model.Heartbeat.ServerTime }</span>
+							<span>up <span data-text="$uptime">{ model.Heartbeat.Uptime }</span></span>
+							<span>start { model.StartedAt }</span>
+						</div>
 					</div>
 				</header>
 
@@ -77,29 +72,36 @@ templ Page(model Model) {
 
 				@tabs.Tabs(tabs.Props{ID: "dashboard-tabs", Class: "min-w-0 gap-3"}) {
 					@tabs.List(tabs.ListProps{Class: "terminal-tabs min-w-0 max-w-full overflow-x-auto rounded-lg border-0 p-1"}) {
-						@tabs.Trigger(tabs.TriggerProps{Value: "overview", IsActive: true, Class: "gap-2 px-3"}) {
+						@tabs.Trigger(tabs.TriggerProps{Value: "overview", IsActive: model.OverviewActive, Class: "gap-2 px-3"}) {
 							@icon.LayoutDashboard(icon.Props{Class: "size-4"})
 							Overview
 						}
-						@tabs.Trigger(tabs.TriggerProps{Value: "connections", Class: "gap-2 px-3"}) {
+						@tabs.Trigger(tabs.TriggerProps{Value: "connections", IsActive: model.ExchangesActive, Class: "gap-2 px-3"}) {
 							@icon.Unplug(icon.Props{Class: "size-4"})
 							Exchanges
 						}
+						@tabs.Trigger(tabs.TriggerProps{Value: "historic", IsActive: model.HistoricActive, Class: "gap-2 px-3"}) {
+							@icon.History(icon.Props{Class: "size-4"})
+							Historic
+						}
 					}
-					@tabs.Content(tabs.ContentProps{Value: "overview", IsActive: true}) {
+					@tabs.Content(tabs.ContentProps{Value: "overview", IsActive: model.OverviewActive}) {
 						<section class="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
 							<div class="min-w-0">
 								@live.Dashboard(model.Live)
 								</div>
 								<div class="min-w-0 xl:sticky xl:top-3">
-									@HeartbeatPanel(model.Heartbeat)
+									@live.BalanceCard(model.Live.BalanceRows)
 									@speed.Panel(model.Speed)
 									@riskui.Panel(model.Risk)
 								</div>
 							</section>
 						}
-					@tabs.Content(tabs.ContentProps{Value: "connections"}) {
+					@tabs.Content(tabs.ContentProps{Value: "connections", IsActive: model.ExchangesActive}) {
 						@exchanges.Dashboard(model.Exchanges)
+					}
+					@tabs.Content(tabs.ContentProps{Value: "historic", IsActive: model.HistoricActive}) {
+						@historic.Dashboard(model.Historic)
 					}
 				}
 			</main>

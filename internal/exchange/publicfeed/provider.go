@@ -13,7 +13,6 @@ import (
 
 	"github.com/coder/websocket"
 	json "github.com/goccy/go-json"
-	"github.com/govalues/decimal"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
 )
 
@@ -130,29 +129,6 @@ func (p *Provider) now() time.Time {
 	return time.Now()
 }
 
-func NewCoinbase() *Provider {
-	return New(Spec{
-		Exchange: exchange.Coinbase,
-		RESTURL: func(binding exchange.Binding, depth int) string {
-			u := "https://api.exchange.coinbase.com/products/" + url.PathEscape(binding.RESTSymbol) + "/book?level=2"
-			return u
-		},
-		ConnectWS: func(_ context.Context, _ *Provider, binding exchange.Binding, _ int) (WSConnection, error) {
-			payload, _ := json.Marshal(map[string]any{
-				"type":        "subscribe",
-				"product_ids": []string{binding.WebSocketSymbol},
-				"channel":     "level2",
-			})
-			return WSConnection{
-				URL:      "wss://advanced-trade-ws.coinbase.com",
-				Payloads: [][]byte{payload},
-				Parser:   newCoinbaseParser(),
-			}, nil
-		},
-		ParseREST: parseCoinbaseREST,
-	})
-}
-
 func NewOKX() *Provider {
 	return New(Spec{
 		Exchange: exchange.OKX,
@@ -187,27 +163,6 @@ func NewBybit() *Provider {
 			return WSConnection{URL: "wss://stream.bybit.com/v5/public/spot", Payloads: [][]byte{payload}, Parser: bybitParser{}}, nil
 		},
 		ParseREST: parseBybitREST,
-	})
-}
-
-func NewBitfinex() *Provider {
-	return New(Spec{
-		Exchange: exchange.Bitfinex,
-		RESTURL: func(binding exchange.Binding, depth int) string {
-			return fmt.Sprintf("https://api-pub.bitfinex.com/v2/book/%s/P0?len=%d", url.PathEscape(binding.RESTSymbol), depth)
-		},
-		ConnectWS: func(_ context.Context, _ *Provider, binding exchange.Binding, depth int) (WSConnection, error) {
-			payload, _ := json.Marshal(map[string]any{
-				"event":   "subscribe",
-				"channel": "book",
-				"symbol":  binding.WebSocketSymbol,
-				"prec":    "P0",
-				"freq":    "F0",
-				"len":     strconv.Itoa(depth),
-			})
-			return WSConnection{URL: "wss://api-pub.bitfinex.com/ws/2", Payloads: [][]byte{payload}, Parser: newBitfinexParser()}, nil
-		},
-		ParseREST: parseBitfinexREST,
 	})
 }
 
@@ -255,22 +210,6 @@ func NewBitstamp() *Provider {
 			return WSConnection{URL: "wss://ws.bitstamp.net", Payloads: [][]byte{payload}, Parser: bitstampParser{}}, nil
 		},
 		ParseREST: parseBitstampREST,
-	})
-}
-
-func NewGemini() *Provider {
-	return New(Spec{
-		Exchange: exchange.Gemini,
-		RESTURL: func(binding exchange.Binding, depth int) string {
-			return fmt.Sprintf("https://api.gemini.com/v1/book/%s?limit_bids=%d&limit_asks=%d", url.PathEscape(binding.RESTSymbol), depth, depth)
-		},
-		ConnectWS: func(_ context.Context, _ *Provider, binding exchange.Binding, _ int) (WSConnection, error) {
-			return WSConnection{
-				URL:    "wss://ws.gemini.com?streams=" + url.QueryEscape(binding.WebSocketSymbol+"@depth10@100ms"),
-				Parser: newGeminiParser(),
-			}, nil
-		},
-		ParseREST: parseGeminiREST,
 	})
 }
 
@@ -419,23 +358,4 @@ func unixMicroString(value string) time.Time {
 		return time.Time{}
 	}
 	return time.UnixMicro(parsed)
-}
-
-func parseTime(value string) time.Time {
-	if value == "" {
-		return time.Time{}
-	}
-	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err == nil {
-		return parsed
-	}
-	return time.Time{}
-}
-
-func mustDecimal(value string) decimal.Decimal {
-	parsed, err := decimal.Parse(value)
-	if err != nil {
-		return decimal.Zero
-	}
-	return parsed
 }

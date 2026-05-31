@@ -247,6 +247,12 @@
     font-size: 0.8rem;
   }
 
+  .terminal-table-spaced th,
+  .terminal-table-spaced td {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+
   .terminal-table tr {
     border-color: rgb(255 255 255 / 6%);
   }
@@ -267,6 +273,17 @@
 
   .terminal-badge svg {
     color: var(--primary);
+  }
+
+  .terminal-page-link {
+    background: rgb(255 255 255 / 7%);
+    color: rgb(247 251 251 / 84%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  }
+
+  a.terminal-page-link:hover {
+    background: rgb(194 244 255 / 14%);
+    color: var(--foreground);
   }
 
   .terminal-icon-shell,

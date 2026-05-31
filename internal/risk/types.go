@@ -3,6 +3,7 @@ package risk
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/govalues/decimal"
 )
@@ -28,6 +29,7 @@ const (
 	ReasonSpreadOutlier  = "SKIP_RISK_SPREAD_OUTLIER"
 	ReasonLatencyTooHigh = "SKIP_RISK_LATENCY"
 	ReasonReserve        = "SKIP_RISK_RESERVE"
+	ReasonCircuitOpen    = "SKIP_RISK_CIRCUIT_OPEN"
 )
 
 var ErrInvalidMode = errors.New("invalid risk mode")
@@ -40,10 +42,13 @@ type Thresholds struct {
 }
 
 type State struct {
-	Mode       Mode       `json:"mode"`
-	Status     Status     `json:"status"`
-	Reasons    []string   `json:"reasons"`
-	Thresholds Thresholds `json:"thresholds"`
+	Mode          Mode       `json:"mode"`
+	Status        Status     `json:"status"`
+	Reasons       []string   `json:"reasons"`
+	Thresholds    Thresholds `json:"thresholds"`
+	CircuitOpen   bool       `json:"circuitOpen"`
+	CircuitReason string     `json:"circuitReason"`
+	HaltedAt      time.Time  `json:"haltedAt"`
 }
 
 type Candidate struct {

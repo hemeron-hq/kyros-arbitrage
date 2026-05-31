@@ -12,6 +12,10 @@ import (
 )
 
 const timestampLayout = time.RFC3339Nano
+const (
+	DefaultPageLimit = int64(25)
+	MaxPageLimit     = int64(100)
+)
 
 type Store struct {
 	database *database.Database
@@ -22,6 +26,20 @@ type Report struct {
 	Summary       Summary       `json:"summary"`
 	Opportunities []Opportunity `json:"opportunities"`
 	Executions    []Execution   `json:"executions"`
+	Pagination    Pagination    `json:"pagination"`
+}
+
+type Pagination struct {
+	Opportunities Page `json:"opportunities"`
+	Executions    Page `json:"executions"`
+}
+
+type Page struct {
+	Total   int64 `json:"total"`
+	Limit   int64 `json:"limit"`
+	Offset  int64 `json:"offset"`
+	HasPrev bool  `json:"hasPrev"`
+	HasNext bool  `json:"hasNext"`
 }
 
 type Summary struct {
@@ -41,13 +59,21 @@ type Opportunity struct {
 	BuyNotional       string `json:"buyNotional"`
 	SellNotional      string `json:"sellNotional"`
 	GrossProfit       string `json:"grossProfit"`
+	GrossBPS          string `json:"grossBps"`
+	BuyFee            string `json:"buyFee"`
+	SellFee           string `json:"sellFee"`
 	TradingFees       string `json:"tradingFees"`
+	TradingFeeBPS     string `json:"tradingFeeBps"`
 	SlippageCost      string `json:"slippageCost"`
+	SlippageBPS       string `json:"slippageBps"`
 	LatencyPenalty    string `json:"latencyPenalty"`
+	LatencyPenaltyBPS string `json:"latencyPenaltyBps"`
 	RebalanceCost     string `json:"rebalanceCost"`
 	ExpectedNetProfit string `json:"expectedNetProfit"`
+	ExpectedNetBPS    string `json:"expectedNetBps"`
 	Decision          string `json:"decision"`
 	ReasonCode        string `json:"reasonCode"`
+	TermsSource       string `json:"termsSource"`
 	Partial           bool   `json:"partial"`
 }
 
@@ -139,6 +165,39 @@ func (s *Store) Report(ctx context.Context, limit int64) (Report, error) {
 		Summary:       summary,
 		Opportunities: opportunities,
 		Executions:    executions,
+		Pagination: Pagination{
+			Opportunities: page(summary.Opportunities, limit, 0),
+			Executions:    page(summary.Executions, limit, 0),
+		},
+	}, nil
+}
+
+func (s *Store) Page(ctx context.Context, limit int64, offset int64) (Report, error) {
+	if s == nil {
+		return Report{}, nil
+	}
+	limit, offset = NormalizePage(limit, offset)
+
+	summary, err := s.Summary(ctx)
+	if err != nil {
+		return Report{}, err
+	}
+	opportunities, err := s.OpportunitiesPage(ctx, limit, offset)
+	if err != nil {
+		return Report{}, err
+	}
+	executions, err := s.ExecutionsPage(ctx, limit, offset)
+	if err != nil {
+		return Report{}, err
+	}
+	return Report{
+		Summary:       summary,
+		Opportunities: opportunities,
+		Executions:    executions,
+		Pagination: Pagination{
+			Opportunities: page(summary.Opportunities, limit, offset),
+			Executions:    page(summary.Executions, limit, offset),
+		},
 	}, nil
 }
 
@@ -170,25 +229,23 @@ func (s *Store) RecentOpportunities(ctx context.Context, limit int64) ([]Opportu
 	}
 	opportunities := make([]Opportunity, 0, len(rows))
 	for _, row := range rows {
-		opportunities = append(opportunities, Opportunity{
-			ID:                row.OpportunityID,
-			ObservedAt:        row.ObservedAt,
-			Market:            row.Market,
-			BuyExchange:       row.BuyExchange,
-			SellExchange:      row.SellExchange,
-			BaseSize:          row.BaseSize,
-			BuyNotional:       row.BuyNotional,
-			SellNotional:      row.SellNotional,
-			GrossProfit:       row.GrossProfit,
-			TradingFees:       row.TradingFees,
-			SlippageCost:      row.SlippageCost,
-			LatencyPenalty:    row.LatencyPenalty,
-			RebalanceCost:     row.RebalanceCost,
-			ExpectedNetProfit: row.ExpectedNetProfit,
-			Decision:          row.Decision,
-			ReasonCode:        row.ReasonCode,
-			Partial:           row.Partial != 0,
-		})
+		opportunities = append(opportunities, opportunityFromRecentRow(row))
+	}
+	return opportunities, nil
+}
+
+func (s *Store) OpportunitiesPage(ctx context.Context, limit int64, offset int64) ([]Opportunity, error) {
+	limit, offset = NormalizePage(limit, offset)
+	rows, err := s.queries.ListOpportunitiesPage(ctx, db.ListOpportunitiesPageParams{
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list opportunities page: %w", err)
+	}
+	opportunities := make([]Opportunity, 0, len(rows))
+	for _, row := range rows {
+		opportunities = append(opportunities, opportunityFromPageRow(row))
 	}
 	return opportunities, nil
 }
@@ -218,6 +275,125 @@ func (s *Store) RecentExecutions(ctx context.Context, limit int64) ([]Execution,
 		})
 	}
 	return executions, nil
+}
+
+func (s *Store) ExecutionsPage(ctx context.Context, limit int64, offset int64) ([]Execution, error) {
+	limit, offset = NormalizePage(limit, offset)
+	rows, err := s.queries.ListExecutionsPage(ctx, db.ListExecutionsPageParams{
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list executions page: %w", err)
+	}
+	executions := make([]Execution, 0, len(rows))
+	for _, row := range rows {
+		executions = append(executions, executionFromPageRow(row))
+	}
+	return executions, nil
+}
+
+func opportunityFromRecentRow(row db.ListRecentOpportunitiesRow) Opportunity {
+	return Opportunity{
+		ID:                row.OpportunityID,
+		ObservedAt:        row.ObservedAt,
+		Market:            row.Market,
+		BuyExchange:       row.BuyExchange,
+		SellExchange:      row.SellExchange,
+		BaseSize:          row.BaseSize,
+		BuyNotional:       row.BuyNotional,
+		SellNotional:      row.SellNotional,
+		GrossProfit:       row.GrossProfit,
+		GrossBPS:          row.GrossBps,
+		BuyFee:            row.BuyFee,
+		SellFee:           row.SellFee,
+		TradingFees:       row.TradingFees,
+		TradingFeeBPS:     row.TradingFeeBps,
+		SlippageCost:      row.SlippageCost,
+		SlippageBPS:       row.SlippageBps,
+		LatencyPenalty:    row.LatencyPenalty,
+		LatencyPenaltyBPS: row.LatencyPenaltyBps,
+		RebalanceCost:     row.RebalanceCost,
+		ExpectedNetProfit: row.ExpectedNetProfit,
+		ExpectedNetBPS:    row.ExpectedNetBps,
+		Decision:          row.Decision,
+		ReasonCode:        row.ReasonCode,
+		TermsSource:       row.TermsSource,
+		Partial:           row.Partial != 0,
+	}
+}
+
+func opportunityFromPageRow(row db.ListOpportunitiesPageRow) Opportunity {
+	return Opportunity{
+		ID:                row.OpportunityID,
+		ObservedAt:        row.ObservedAt,
+		Market:            row.Market,
+		BuyExchange:       row.BuyExchange,
+		SellExchange:      row.SellExchange,
+		BaseSize:          row.BaseSize,
+		BuyNotional:       row.BuyNotional,
+		SellNotional:      row.SellNotional,
+		GrossProfit:       row.GrossProfit,
+		GrossBPS:          row.GrossBps,
+		BuyFee:            row.BuyFee,
+		SellFee:           row.SellFee,
+		TradingFees:       row.TradingFees,
+		TradingFeeBPS:     row.TradingFeeBps,
+		SlippageCost:      row.SlippageCost,
+		SlippageBPS:       row.SlippageBps,
+		LatencyPenalty:    row.LatencyPenalty,
+		LatencyPenaltyBPS: row.LatencyPenaltyBps,
+		RebalanceCost:     row.RebalanceCost,
+		ExpectedNetProfit: row.ExpectedNetProfit,
+		ExpectedNetBPS:    row.ExpectedNetBps,
+		Decision:          row.Decision,
+		ReasonCode:        row.ReasonCode,
+		TermsSource:       row.TermsSource,
+		Partial:           row.Partial != 0,
+	}
+}
+
+func executionFromPageRow(row db.ListExecutionsPageRow) Execution {
+	return Execution{
+		ID:             row.OpportunityID,
+		ExecutedAt:     row.ExecutedAt,
+		Market:         row.Market,
+		BuyExchange:    row.BuyExchange,
+		SellExchange:   row.SellExchange,
+		BaseSize:       row.BaseSize,
+		BuyNotional:    row.BuyNotional,
+		SellNotional:   row.SellNotional,
+		BuyFee:         row.BuyFee,
+		SellFee:        row.SellFee,
+		LatencyPenalty: row.LatencyPenalty,
+		RebalanceCost:  row.RebalanceCost,
+		NetProfit:      row.NetProfit,
+		TermsSource:    row.TermsSource,
+	}
+}
+
+func NormalizePage(limit int64, offset int64) (int64, int64) {
+	if limit <= 0 {
+		limit = DefaultPageLimit
+	}
+	if limit > MaxPageLimit {
+		limit = MaxPageLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
+}
+
+func page(total int64, limit int64, offset int64) Page {
+	limit, offset = NormalizePage(limit, offset)
+	return Page{
+		Total:   total,
+		Limit:   limit,
+		Offset:  offset,
+		HasPrev: offset > 0,
+		HasNext: offset+limit < total,
+	}
 }
 
 func (s *Store) totalPNL(ctx context.Context) (decimal.Decimal, error) {

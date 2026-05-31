@@ -56,17 +56,56 @@ SELECT
   buy_notional,
   sell_notional,
   gross_profit,
+  gross_bps,
+  buy_fee,
+  sell_fee,
   trading_fees,
+  trading_fee_bps,
   slippage_cost,
+  slippage_bps,
   latency_penalty,
+  latency_penalty_bps,
   rebalance_cost,
   expected_net_profit,
+  expected_net_bps,
   decision,
   reason_code,
+  terms_source,
   partial
 FROM opportunities
 ORDER BY observed_at DESC, id DESC
 LIMIT ?;
+
+-- name: ListOpportunitiesPage :many
+SELECT
+  opportunity_id,
+  observed_at,
+  market,
+  buy_exchange,
+  sell_exchange,
+  base_size,
+  buy_notional,
+  sell_notional,
+  gross_profit,
+  gross_bps,
+  buy_fee,
+  sell_fee,
+  trading_fees,
+  trading_fee_bps,
+  slippage_cost,
+  slippage_bps,
+  latency_penalty,
+  latency_penalty_bps,
+  rebalance_cost,
+  expected_net_profit,
+  expected_net_bps,
+  decision,
+  reason_code,
+  terms_source,
+  partial
+FROM opportunities
+ORDER BY observed_at DESC, id DESC
+LIMIT ? OFFSET ?;
 
 -- name: ListRecentExecutions :many
 SELECT
@@ -87,6 +126,26 @@ SELECT
 FROM executions
 ORDER BY executed_at DESC, id DESC
 LIMIT ?;
+
+-- name: ListExecutionsPage :many
+SELECT
+  opportunity_id,
+  executed_at,
+  market,
+  buy_exchange,
+  sell_exchange,
+  base_size,
+  buy_notional,
+  sell_notional,
+  buy_fee,
+  sell_fee,
+  latency_penalty,
+  rebalance_cost,
+  net_profit,
+  terms_source
+FROM executions
+ORDER BY executed_at DESC, id DESC
+LIMIT ? OFFSET ?;
 
 -- name: CountOpportunities :one
 SELECT count(*) FROM opportunities;

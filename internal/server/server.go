@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	json "github.com/goccy/go-json"
@@ -213,12 +214,31 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) historyAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	report, err := s.historyStore.Report(r.Context(), 25)
+	limit, offset := historyPageParams(r)
+	report, err := s.historyStore.Page(r.Context(), limit, offset)
 	if err != nil {
 		http.Error(w, "load history", http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(report)
+}
+
+func historyPageParams(r *http.Request) (int64, int64) {
+	query := r.URL.Query()
+	limit := parseInt64(query.Get("limit"), history.DefaultPageLimit)
+	offset := parseInt64(query.Get("offset"), 0)
+	return history.NormalizePage(limit, offset)
+}
+
+func parseInt64(value string, fallback int64) int64 {
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func (s *Server) metricsAPI(w http.ResponseWriter, _ *http.Request) {

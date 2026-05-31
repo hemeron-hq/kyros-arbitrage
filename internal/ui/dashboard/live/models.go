@@ -48,32 +48,37 @@ type OpportunityRow struct {
 	Market      string
 	Size        string
 	GrossPnl    string
+	GrossBPS    string
 	Fees        string
 	Slippage    string
 	Latency     string
 	Rebalance   string
+	CostStack   string
 	ExpectedNet string
+	NetBPS      string
 	Decision    string
 	Reason      string
 }
 
 type HistoryOpportunityRow struct {
-	Observed    string
-	Route       string
-	Market      string
-	Size        string
-	ExpectedNet string
-	Decision    string
-	Reason      string
+	Observed     string
+	ObservedFull string
+	Route        string
+	Market       string
+	Size         string
+	ExpectedNet  string
+	Decision     string
+	Reason       string
 }
 
 type HistoryExecutionRow struct {
-	Executed    string
-	Route       string
-	Market      string
-	Size        string
-	NetProfit   string
-	TermsSource string
+	Executed     string
+	ExecutedFull string
+	Route        string
+	Market       string
+	Size         string
+	NetProfit    string
+	TermsSource  string
 }
 
 type TermsSourceRow struct {
