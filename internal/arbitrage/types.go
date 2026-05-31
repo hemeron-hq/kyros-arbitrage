@@ -28,6 +28,7 @@ const (
 	ReasonNegativeNet         = "SKIP_NEGATIVE_NET"
 	ReasonLedgerApplyFailed   = "SKIP_LEDGER_APPLY_FAILED"
 	ReasonNoLiveRoute         = "WAITING_FOR_LIVE_BOOKS"
+	ReasonTransferFeeMissing  = "SKIP_TRANSFER_FEE_UNAVAILABLE"
 )
 
 type Opportunity struct {

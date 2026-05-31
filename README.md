@@ -49,6 +49,8 @@ KRAKEN_API_SECRET=
 
 When valid exchange keys are present, Kyros refreshes account-specific trading fees and balances in the background. When an exchange has no valid keys or lacks the required read permission, only that exchange market falls back to code-owned demo terms and wallet profiles. Fallback state is visible in the dashboard terms-source health panel and recorded with simulated decisions, so demo results do not claim authenticated terms for exchanges using fallback data.
 
+The `Connections` tab is read-only. It visualizes the environment-configured exchange credential state and the execution terms currently feeding the paper engine: source, freshness, fee rates, market constraints, balances, and transfer-fee inputs. It does not accept API keys in the browser and does not place real orders.
+
 For local development with watchers:
 
 ```bash
@@ -57,10 +59,11 @@ task dev
 
 ## Endpoints
 
-- `/` renders the SSR dashboard with feed status, net opportunities, paper wallets, terms-source health, and session P&L.
+- `/` renders the SSR dashboard with feed status, net opportunities, paper wallets, terms-source health, execution-term details, and session P&L.
 - `/stream` opens a Datastar SSE stream with coalesced dashboard patches.
 - `/healthz` returns process and feed-health status.
 - `/api/history` returns persisted opportunity, simulated execution, and P&L history.
+- `/api/risk` returns the persisted risk mode, circuit status, reasons, and active thresholds.
 - `/assets/` serves CSS and the self-hosted Datastar client.
 
 ## Package Layout
@@ -85,6 +88,8 @@ task dev
 The first runtime defaults are code-owned: Binance and Kraken `BTC/USDT`, L2 top 10, `3s` stale threshold, `3s` polling fallback interval, `15m` terms refresh interval, `30m` authenticated terms TTL, `5m` latency-model window, fallback fee profiles, fallback paper wallet seeds, and proactive WebSocket recycling before 24 hours. Exchange binding defaults live with the shared exchange contracts, while service timing stays in code so runtime controls can be added deliberately later instead of expanding environment configuration early.
 
 The scoring hot path reads in-memory snapshots only. REST calls for authenticated fees, balances, withdrawal-fee metadata, and market constraints run in the background terms service and are never made while ranking a market-data update.
+
+Every simulated route subtracts trading fees, slippage, latency penalty, and a rebalance cost derived from exchange transfer-fee terms. Authenticated routes are skipped when required transfer-fee inputs are unavailable, while fallback demo terms use visible code-owned transfer-fee assumptions.
 
 ## Wallet Model
 

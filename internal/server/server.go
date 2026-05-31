@@ -20,6 +20,7 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/platform/database"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio/paper"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/view"
 	"github.com/starfederation/datastar-go/datastar"
@@ -31,7 +32,6 @@ const (
 	displayTimeLayout = "Jan 2, 2006 15:04:05"
 	readHeaderTimeout = 5 * time.Second
 	uiPatchInterval   = 250 * time.Millisecond
-	decisionInterval  = 500 * time.Millisecond
 )
 
 type Server struct {
@@ -41,6 +41,7 @@ type Server struct {
 	termsStore           *terms.Store
 	ledger               portfolio.Store
 	decisionEngine       *arbitrage.Engine
+	riskController       *risk.Controller
 	database             *database.Database
 	historyStore         *history.Store
 	disableMarketService bool
@@ -70,18 +71,26 @@ func New(cfg config.Config, opts ...Option) (*http.Server, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	historyStore := history.New(appDatabase)
+	riskStore := risk.NewStore(appDatabase)
+	riskController, err := risk.NewController(ctx, riskStore)
+	if err != nil {
+		cancel()
+		_ = appDatabase.Close()
+		return nil, fmt.Errorf("load risk settings: %w", err)
+	}
 	termsStore := terms.NewStore(now)
 	ledger := paper.NewLedger()
 	app := &Server{
-		cfg:          cfg,
-		startedAt:    now,
-		marketStore:  market.NewStore(marketConfig.StaleAfter),
-		termsStore:   termsStore,
-		ledger:       ledger,
-		database:     appDatabase,
-		historyStore: historyStore,
+		cfg:            cfg,
+		startedAt:      now,
+		marketStore:    market.NewStore(marketConfig.StaleAfter),
+		termsStore:     termsStore,
+		ledger:         ledger,
+		riskController: riskController,
+		database:       appDatabase,
+		historyStore:   historyStore,
 	}
-	app.decisionEngine = arbitrage.NewEngine(app.termsStore, app.ledger)
+	app.decisionEngine = arbitrage.NewEngine(app.termsStore, app.ledger, app.riskController)
 	for _, opt := range opts {
 		opt(app)
 	}
@@ -127,10 +136,13 @@ func New(cfg config.Config, opts ...Option) (*http.Server, error) {
 
 func (s *Server) runDecisionLoop(ctx context.Context) {
 	events := s.marketStore.Subscribe(ctx.Done())
-	ticker := time.NewTicker(decisionInterval)
-	defer ticker.Stop()
 
-	dirty := true
+	evaluate := func(now time.Time) {
+		snapshot := s.decisionEngine.Evaluate(s.marketStore.Snapshot(), now)
+		_ = s.historyStore.RecordSnapshot(ctx, snapshot)
+	}
+	evaluate(time.Now())
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -139,14 +151,18 @@ func (s *Server) runDecisionLoop(ctx context.Context) {
 			if !ok {
 				return
 			}
-			dirty = true
-		case now := <-ticker.C:
-			if !dirty {
-				continue
+			for {
+				select {
+				case _, ok := <-events:
+					if !ok {
+						return
+					}
+					continue
+				default:
+				}
+				break
 			}
-			snapshot := s.decisionEngine.Evaluate(s.marketStore.Snapshot(), now)
-			_ = s.historyStore.RecordSnapshot(ctx, snapshot)
-			dirty = false
+			evaluate(time.Now())
 		}
 	}
 }
@@ -157,6 +173,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /api/history", s.historyAPI)
+	mux.HandleFunc("GET /api/risk", s.riskAPI)
+	mux.HandleFunc("POST /api/risk/mode", s.setRiskMode)
 	mux.HandleFunc("GET /stream", s.stream)
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", s.assetHandler()))
 
@@ -206,6 +224,34 @@ func (s *Server) historyAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(report)
+}
+
+func (s *Server) riskAPI(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(s.riskController.State())
+}
+
+func (s *Server) setRiskMode(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "parse risk mode", http.StatusBadRequest)
+		return
+	}
+	mode, err := risk.ParseMode(r.FormValue("mode"))
+	if err != nil {
+		http.Error(w, "invalid risk mode", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+	if err := s.riskController.SetMode(ctx, mode); err != nil {
+		http.Error(w, "save risk mode", http.StatusInternalServerError)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +331,13 @@ func (s *Server) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks in
 	if err := sse.PatchElementTempl(view.HeartbeatPanel(heartbeat)); err != nil {
 		return false
 	}
+	if err := sse.PatchElementTempl(view.RiskPanel(live.Risk)); err != nil {
+		return false
+	}
 	if err := sse.PatchElementTempl(view.LiveDashboard(live)); err != nil {
+		return false
+	}
+	if err := sse.PatchElementTempl(view.ConnectionDashboard(live.Connection)); err != nil {
 		return false
 	}
 
@@ -393,6 +445,8 @@ func (s *Server) liveDashboardView(ctx context.Context, now time.Time) view.Live
 		OpportunityRows: opportunities,
 		TermsRows:       termsRows,
 		BalanceRows:     balanceRows,
+		Risk:            s.riskView(),
+		Connection:      s.connectionTermsView(now),
 		History:         historyView,
 		LiveFeeds:       liveFeeds,
 		StaleFeeds:      staleFeeds,
@@ -402,6 +456,83 @@ func (s *Server) liveDashboardView(ctx context.Context, now time.Time) view.Live
 		Executed:        strconv.Itoa(decisionSnapshot.Executed),
 		Rejected:        strconv.Itoa(decisionSnapshot.Rejected),
 		LastUpdated:     displayTimestamp(decisionSnapshot.LastUpdated),
+	}
+}
+
+func (s *Server) riskView() view.RiskView {
+	state := s.riskController.State()
+	return view.RiskView{
+		Mode:               string(state.Mode),
+		Status:             string(state.Status),
+		StatusClass:        riskStatusClass(state.Status),
+		Reasons:            state.Reasons,
+		MaxSpread:          displayBPS(state.Thresholds.MaxSpreadBPS),
+		MaxLatencyPenalty:  displayBPS(state.Thresholds.MaxLatencyPenaltyBPS),
+		MaxDrawdown:        displayQuote(state.Thresholds.MaxDrawdown),
+		Reserve:            displayPercent(state.Thresholds.ReserveRate),
+		ConservativeActive: state.Mode == risk.ModeConservative,
+		BalancedActive:     state.Mode == risk.ModeBalanced,
+		AggressiveActive:   state.Mode == risk.ModeAggressive,
+	}
+}
+
+func (s *Server) connectionTermsView(now time.Time) view.ConnectionTermsView {
+	snapshots := s.termsStore.All()
+	summaryRows := make([]view.ConnectionSummaryRow, 0, len(snapshots))
+	ruleRows := make([]view.ConnectionRuleRow, 0, len(snapshots))
+	balanceRows := make([]view.ConnectionBalanceRow, 0, len(snapshots)*2)
+	transferRows := make([]view.ConnectionTransferRow, 0, len(snapshots)*2)
+
+	for _, snapshot := range snapshots {
+		exchangeName := titleCase(string(snapshot.Exchange))
+		marketName := displayMarket(snapshot.Market)
+		source := string(snapshot.Source)
+
+		summaryRows = append(summaryRows, view.ConnectionSummaryRow{
+			Exchange: exchangeName,
+			Market:   marketName,
+			Source:   source,
+			Status:   displayFresh(snapshot.IsFresh(now)),
+			Updated:  displayTimestamp(snapshot.UpdatedAt),
+			Expires:  displayTimestamp(snapshot.ExpiresAt),
+			Message:  snapshot.Message,
+		})
+		ruleRows = append(ruleRows, view.ConnectionRuleRow{
+			Exchange:    exchangeName,
+			Market:      marketName,
+			MakerFee:    displayRateBPS(snapshot.Fees.MakerRate),
+			TakerFee:    displayRateBPS(snapshot.Fees.TakerRate),
+			MinBase:     displayOptionalAssetAmount(snapshot.Market.Base, snapshot.Constraints.MinBase),
+			MinNotional: displayOptionalAssetAmount(snapshot.Market.Quote, snapshot.Constraints.MinNotional),
+			StepSize:    displayOptionalAssetAmount(snapshot.Market.Base, snapshot.Constraints.StepSize),
+			TickSize:    displayOptionalAssetAmount(snapshot.Market.Quote, snapshot.Constraints.TickSize),
+			Source:      source,
+		})
+
+		for _, asset := range []string{snapshot.Market.Base, snapshot.Market.Quote} {
+			balanceRows = append(balanceRows, view.ConnectionBalanceRow{
+				Exchange: exchangeName,
+				Market:   marketName,
+				Asset:    asset,
+				Amount:   displayBalance(snapshot, asset),
+				Source:   source,
+			})
+			transferRows = append(transferRows, view.ConnectionTransferRow{
+				Exchange: exchangeName,
+				Market:   marketName,
+				Asset:    asset,
+				Fee:      displayTransferFee(snapshot, asset),
+				Source:   source,
+			})
+		}
+	}
+
+	return view.ConnectionTermsView{
+		SummaryRows:  summaryRows,
+		RuleRows:     ruleRows,
+		BalanceRows:  balanceRows,
+		TransferRows: transferRows,
+		LastUpdated:  displayTimestamp(now),
 	}
 }
 
@@ -496,6 +627,19 @@ func statusClass(status exchange.FeedStatus) string {
 	}
 }
 
+func riskStatusClass(status risk.Status) string {
+	switch status {
+	case risk.StatusNormal:
+		return "bg-emerald-500"
+	case risk.StatusWarning:
+		return "bg-amber-500"
+	case risk.StatusHalted:
+		return "bg-red-500"
+	default:
+		return "bg-muted-foreground"
+	}
+}
+
 func displayMillis(value *int64) string {
 	if value == nil {
 		return "-"
@@ -584,8 +728,56 @@ func displayAssetAmount(asset string, value decimal.Decimal) string {
 	}
 }
 
+func displayOptionalAssetAmount(asset string, value decimal.Decimal) string {
+	if value.IsZero() {
+		return "-"
+	}
+	return displayAssetAmount(asset, value)
+}
+
 func displayBPS(value decimal.Decimal) string {
 	return fmt.Sprintf("%.2f bps", value)
+}
+
+func displayRateBPS(value decimal.Decimal) string {
+	if value.IsZero() {
+		return "-"
+	}
+	bpsValue, err := value.Mul(decimal.MustNew(10000, 0))
+	if err != nil {
+		return "-"
+	}
+	return displayBPS(bpsValue)
+}
+
+func displayPercent(value decimal.Decimal) string {
+	percent, err := value.Mul(decimal.MustNew(100, 0))
+	if err != nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f%%", percent)
+}
+
+func displayBalance(snapshot terms.Snapshot, asset string) string {
+	if snapshot.Balances == nil {
+		return "-"
+	}
+	value, ok := snapshot.Balances[asset]
+	if !ok {
+		return "-"
+	}
+	return displayAssetAmount(asset, value)
+}
+
+func displayTransferFee(snapshot terms.Snapshot, asset string) string {
+	if snapshot.TransferFees == nil {
+		return "-"
+	}
+	value, ok := snapshot.TransferFees[asset]
+	if !ok {
+		return "-"
+	}
+	return displayAssetAmount(asset, value)
 }
 
 func parseDecimal(value string) (decimal.Decimal, bool) {

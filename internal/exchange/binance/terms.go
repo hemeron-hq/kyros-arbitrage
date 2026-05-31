@@ -83,11 +83,13 @@ func (p *Provider) fetchAccountBalances(ctx context.Context, now time.Time) (map
 		return nil, fmt.Errorf("binance account: %w", err)
 	}
 	balances := make(map[string]decimal.Decimal, len(response.Balances))
+	parsedAny := false
 	for _, balance := range response.Balances {
 		free, err := decimal.Parse(balance.Free)
 		if err != nil {
 			continue
 		}
+		parsedAny = true
 		locked, err := decimal.Parse(balance.Locked)
 		if err != nil {
 			locked = decimal.Zero
@@ -100,8 +102,8 @@ func (p *Provider) fetchAccountBalances(ctx context.Context, now time.Time) (map
 			balances[balance.Asset] = total
 		}
 	}
-	if len(balances) == 0 {
-		return nil, fmt.Errorf("binance account returned no balances")
+	if !parsedAny {
+		return nil, fmt.Errorf("binance account returned no parseable balances")
 	}
 	return balances, nil
 }

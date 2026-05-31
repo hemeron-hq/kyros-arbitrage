@@ -6,7 +6,9 @@ import (
 	"github.com/templui/templui/components/badge"
 	"github.com/templui/templui/components/button"
 	"github.com/templui/templui/components/card"
+	"github.com/templui/templui/components/icon"
 	"github.com/templui/templui/components/table"
+	"github.com/templui/templui/components/tabs"
 )
 
 templ Page(model PageModel) {
@@ -27,17 +29,18 @@ templ Page(model PageModel) {
 				}) }
 				data-init="@get('/stream', {openWhenHidden: true})"
 			>
-				<header class="terminal-topbar flex flex-col gap-4 rounded-lg border border-border/80 px-4 py-3 md:flex-row md:items-center md:justify-between">
+				<header class="terminal-topbar flex flex-col gap-4 rounded-lg border-0 px-4 py-3 md:flex-row md:items-center md:justify-between">
 					<div class="flex min-w-0 items-start gap-3">
-						<div class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-primary/35 bg-primary/15 text-primary shadow-[0_0_24px_color-mix(in_oklab,var(--primary)_22%,transparent)]">
-							<span class="size-3 rounded-[3px] bg-current"></span>
+						<div class="terminal-icon-shell mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg text-primary">
+							@icon.Radar(icon.Props{Class: "size-4"})
 						</div>
 						<div class="min-w-0 space-y-2">
 						<div class="flex flex-wrap items-center gap-2">
-							@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
+							@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Class: "terminal-badge"}) {
+								@icon.Activity(icon.Props{Class: "size-3"})
 								Realtime feeds
 							}
-							@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+							@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
 								BTC/USDT
 							}
 						</div>
@@ -56,13 +59,14 @@ templ Page(model PageModel) {
 						</div>
 						@button.Button(button.Props{
 							Variant: button.VariantSecondary,
-							Class: "h-9 rounded-lg border border-border bg-foreground px-4 text-background shadow-[0_12px_28px_rgba(0,0,0,0.28)] hover:bg-foreground/90",
+							Class: "h-9 rounded-lg border-0 bg-foreground px-4 text-background shadow-none hover:bg-foreground/90",
 							Attributes: templ.Attributes{
 								"data-on:click": "@get('/stream')",
 								"data-indicator:streaming": "",
 								"data-attr:disabled": "$streaming",
 							},
 						}) {
+							@icon.RotateCcw(icon.Props{Class: "size-4"})
 							Reconnect
 						}
 					</div>
@@ -70,14 +74,32 @@ templ Page(model PageModel) {
 
 				@MetricStrip(model.Live)
 
-				<section class="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-					<div class="min-w-0">
-						@LiveDashboard(model.Live)
-					</div>
-					<div class="min-w-0 xl:sticky xl:top-3">
-						@HeartbeatPanel(model.Heartbeat)
-					</div>
-				</section>
+				@tabs.Tabs(tabs.Props{ID: "dashboard-tabs", Class: "min-w-0 gap-3"}) {
+					@tabs.List(tabs.ListProps{Class: "terminal-tabs min-w-0 max-w-full overflow-x-auto rounded-lg border-0 p-1"}) {
+						@tabs.Trigger(tabs.TriggerProps{Value: "overview", IsActive: true, Class: "gap-2 px-3"}) {
+							@icon.LayoutDashboard(icon.Props{Class: "size-4"})
+							Overview
+						}
+						@tabs.Trigger(tabs.TriggerProps{Value: "connections", Class: "gap-2 px-3"}) {
+							@icon.Unplug(icon.Props{Class: "size-4"})
+							Connections
+						}
+					}
+					@tabs.Content(tabs.ContentProps{Value: "overview", IsActive: true}) {
+						<section class="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+							<div class="min-w-0">
+								@LiveDashboard(model.Live)
+								</div>
+								<div class="min-w-0 xl:sticky xl:top-3">
+									@HeartbeatPanel(model.Heartbeat)
+									@RiskPanel(model.Live.Risk)
+								</div>
+							</section>
+						}
+					@tabs.Content(tabs.ContentProps{Value: "connections"}) {
+						@ConnectionDashboard(model.Live.Connection)
+					}
+				}
 			</main>
 		</body>
 	</html>
@@ -90,25 +112,31 @@ templ Head(title string) {
 		<title>{ title }</title>
 		<link rel="stylesheet" href="/assets/css/output.css"/>
 		<script type="module" src="/assets/js/datastar.js"></script>
+		@tabs.Script()
 	</head>
 }
 
 templ MetricStrip(live LiveDashboardView) {
 	<section id="metric-strip" class="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-6">
-		@MetricCard("Live feeds", strconv.Itoa(live.LiveFeeds), "Backend market streams.")
-		@MetricCard("Best net P&L", live.BestNetPnl, live.BestNetState)
-		@MetricCard("Session P&L", live.SessionPnl, live.Executed + " simulated fills")
-		@MetricCard("History P&L", live.History.TotalPnl, live.History.ExecutionCount + " stored trades")
-		@MetricCard("Rejected", live.Rejected, "Current decision pass.")
-		@MetricCard("Stale/error feeds", strconv.Itoa(live.StaleFeeds), "Fallback and reconnect state.")
+		@MetricCard("Live feeds", strconv.Itoa(live.LiveFeeds), "Backend market streams.", "radio")
+		@MetricCard("Best net P&L", live.BestNetPnl, live.BestNetState, "trending-up")
+		@MetricCard("Session P&L", live.SessionPnl, live.Executed + " simulated fills", "wallet-cards")
+		@MetricCard("History P&L", live.History.TotalPnl, live.History.ExecutionCount + " stored trades", "history")
+		@MetricCard("Rejected", live.Rejected, "Current decision pass.", "circle-alert")
+		@MetricCard("Stale/error feeds", strconv.Itoa(live.StaleFeeds), "Fallback and reconnect state.", "wifi-off")
 	</section>
 }
 
-templ MetricCard(label string, value string, detail string) {
-	@card.Card(card.Props{Class: "terminal-card min-w-0"}) {
+templ MetricCard(label string, value string, detail string, iconName string) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 border-0 bg-transparent shadow-none"}) {
 		@card.Content(card.ContentProps{Class: "p-4"}) {
 			<div class="min-w-0 space-y-1">
-				<div class="text-xs uppercase text-muted-foreground">{ label }</div>
+				<div class="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+					<span class="terminal-mini-icon grid size-5 shrink-0 place-items-center rounded-md">
+						@icon.Icon(iconName)(icon.Props{Class: "size-3.5"})
+					</span>
+					<span>{ label }</span>
+				</div>
 				<div class="font-mono text-xl font-semibold tracking-normal text-foreground">{ value }</div>
 				<div class="break-words text-xs text-muted-foreground">{ detail }</div>
 			</div>
@@ -117,18 +145,23 @@ templ MetricCard(label string, value string, detail string) {
 }
 
 templ HeartbeatPanel(heartbeat HeartbeatView) {
-	@card.Card(card.Props{ID: "heartbeat-panel", Class: "terminal-card min-w-0 overflow-hidden"}) {
+	@card.Card(card.Props{ID: "heartbeat-panel", Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
 		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			<div class="flex items-start justify-between gap-3">
-				<div>
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.Server(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
 					@card.Title() {
 						System heartbeat
 					}
 					@card.Description() {
 						Server stream and process uptime.
 					}
+					</div>
 				</div>
-				@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Class: "flex items-center gap-2"}) {
+				@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Class: "terminal-badge flex items-center gap-2"}) {
 					<span class={ "size-2 rounded-full " + heartbeat.StatusClass }></span>
 					<span>{ heartbeat.StatusLabel }</span>
 				}
@@ -136,25 +169,101 @@ templ HeartbeatPanel(heartbeat HeartbeatView) {
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
 			<dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-				<div class="terminal-stat rounded-lg border border-border p-3">
+				<div class="terminal-stat rounded-lg border-0 p-3">
 					<dt class="text-muted-foreground">Server time</dt>
 					<dd class="mt-1 break-words font-mono text-xs" data-text="$serverTime">{ heartbeat.ServerTime }</dd>
 				</div>
-				<div class="terminal-stat rounded-lg border border-border p-3">
+				<div class="terminal-stat rounded-lg border-0 p-3">
 					<dt class="text-muted-foreground">Heartbeats</dt>
 					<dd class="mt-1 font-mono text-lg font-semibold" data-text="$ticks">{ heartbeat.TicksLabel }</dd>
 				</div>
-				<div class="terminal-stat rounded-lg border border-border p-3">
+				<div class="terminal-stat rounded-lg border-0 p-3">
 					<dt class="text-muted-foreground">Uptime</dt>
 					<dd class="mt-1 font-mono text-xs">{ heartbeat.Uptime }</dd>
 				</div>
-				<div class="terminal-stat rounded-lg border border-border p-3">
+				<div class="terminal-stat rounded-lg border-0 p-3">
 					<dt class="text-muted-foreground">Transport</dt>
 					<dd class="mt-1 font-medium">SSE</dd>
 				</div>
 			</dl>
 		}
 	}
+}
+
+templ RiskPanel(risk RiskView) {
+	@card.Card(card.Props{ID: "risk-panel", Class: "terminal-card mt-3 min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex items-start justify-between gap-3">
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.ShieldAlert(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
+						@card.Title() {
+							Risk controls
+						}
+						@card.Description() {
+							Persisted circuit mode and execution guards.
+						}
+					</div>
+				</div>
+				@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge flex items-center gap-2"}) {
+					<span class={ "size-2 rounded-full " + risk.StatusClass }></span>
+					<span>{ risk.Status }</span>
+				}
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<form method="post" action="/api/risk/mode" class="grid gap-3">
+				<div class="grid grid-cols-3 gap-1 rounded-lg p-1 terminal-stat">
+					@RiskModeButton("conservative", "Conservative", risk.ConservativeActive)
+					@RiskModeButton("balanced", "Balanced", risk.BalancedActive)
+					@RiskModeButton("aggressive", "Aggressive", risk.AggressiveActive)
+				</div>
+				<dl class="grid grid-cols-2 gap-2 text-sm">
+					<div class="terminal-stat rounded-lg border-0 p-3">
+						<dt class="text-muted-foreground">Max spread</dt>
+						<dd class="mt-1 font-mono text-xs">{ risk.MaxSpread }</dd>
+					</div>
+					<div class="terminal-stat rounded-lg border-0 p-3">
+						<dt class="text-muted-foreground">Max latency</dt>
+						<dd class="mt-1 font-mono text-xs">{ risk.MaxLatencyPenalty }</dd>
+					</div>
+					<div class="terminal-stat rounded-lg border-0 p-3">
+						<dt class="text-muted-foreground">Drawdown</dt>
+						<dd class="mt-1 font-mono text-xs">{ risk.MaxDrawdown }</dd>
+					</div>
+					<div class="terminal-stat rounded-lg border-0 p-3">
+						<dt class="text-muted-foreground">Reserve</dt>
+						<dd class="mt-1 font-mono text-xs">{ risk.Reserve }</dd>
+					</div>
+				</dl>
+				<div class="space-y-1 text-xs text-muted-foreground">
+					for _, reason := range risk.Reasons {
+						<div class="break-words font-mono">{ reason }</div>
+					}
+				</div>
+			</form>
+		}
+	}
+}
+
+templ RiskModeButton(value string, label string, active bool) {
+	<button
+		type="submit"
+		name="mode"
+		value={ value }
+		class={ "h-8 rounded-md px-2 text-xs font-medium transition " + riskModeButtonClass(active) }
+	>
+		{ label }
+	</button>
+}
+
+func riskModeButtonClass(active bool) string {
+	if active {
+		return "bg-foreground text-background"
+	}
+	return "text-muted-foreground hover:text-foreground"
 }
 
 templ LiveDashboard(live LiveDashboardView) {
@@ -170,22 +279,27 @@ templ LiveDashboard(live LiveDashboardView) {
 }
 
 templ FeedCard(rows []FeedRow, lastUpdated string) {
-	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
 		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-				<div>
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.Radio(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
 					@card.Title() {
 						Exchange feeds
 					}
 					@card.Description() {
 						Top 10 levels from public BTC/USDT books.
 					}
+					</div>
 				</div>
 				<span class="font-mono text-xs text-muted-foreground">{ lastUpdated }</span>
 			</div>
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
-			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[860px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
@@ -248,7 +362,7 @@ templ FeedCard(rows []FeedRow, lastUpdated string) {
 									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Latency }</span>
 								}
 								@table.Cell(table.CellProps{Class: "align-top"}) {
-									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
 										{ row.Transport }
 									}
 								}
@@ -262,17 +376,24 @@ templ FeedCard(rows []FeedRow, lastUpdated string) {
 }
 
 templ OpportunityCard(rows []OpportunityRow) {
-	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
 		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.TrendingUp(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
 			@card.Title() {
 				Decision engine
 			}
 			@card.Description() {
 				Net profitability after fees, slippage, latency, and simulated wallet constraints.
 			}
+				</div>
+			</div>
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
-			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[1040px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
@@ -342,7 +463,7 @@ templ OpportunityCard(rows []OpportunityRow) {
 									<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.ExpectedNet }</span>
 								}
 								@table.Cell(table.CellProps{Class: "align-top"}) {
-									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
 										{ row.Decision }
 									}
 								}
@@ -359,16 +480,21 @@ templ OpportunityCard(rows []OpportunityRow) {
 }
 
 templ HistoryCard(history HistoryView) {
-	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
 		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-				<div>
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.Database(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
 					@card.Title() {
 						Persistent history
 					}
 					@card.Description() {
 						Stored opportunities, simulated fills, and accumulated P&L.
 					}
+					</div>
 				</div>
 				<div class="text-left text-xs text-muted-foreground sm:text-right">
 					<div>{ history.Status }</div>
@@ -379,15 +505,15 @@ templ HistoryCard(history HistoryView) {
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
 			<div class="grid gap-3">
 				<dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-					<div class="terminal-stat rounded-lg border border-border p-3">
+					<div class="terminal-stat rounded-lg border-0 p-3">
 						<dt class="text-muted-foreground">Stored opportunities</dt>
 						<dd class="mt-1 font-mono text-lg font-semibold">{ history.OpportunityCount }</dd>
 					</div>
-					<div class="terminal-stat rounded-lg border border-border p-3">
+					<div class="terminal-stat rounded-lg border-0 p-3">
 						<dt class="text-muted-foreground">Stored trades</dt>
 						<dd class="mt-1 font-mono text-lg font-semibold">{ history.ExecutionCount }</dd>
 					</div>
-					<div class="terminal-stat rounded-lg border border-border p-3">
+					<div class="terminal-stat rounded-lg border-0 p-3">
 						<dt class="text-muted-foreground">Accumulated P&L</dt>
 						<dd class="mt-1 font-mono text-lg font-semibold">{ history.TotalPnl }</dd>
 					</div>
@@ -396,7 +522,7 @@ templ HistoryCard(history HistoryView) {
 				<div class="grid gap-3 2xl:grid-cols-2">
 					<div class="min-w-0">
 						<div class="mb-2 text-sm font-medium">Recent simulated fills</div>
-						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
 							@table.Table(table.Props{Class: "min-w-[760px] table-fixed"}) {
 								@table.Header() {
 									@table.Row() {
@@ -457,7 +583,7 @@ templ HistoryCard(history HistoryView) {
 
 					<div class="min-w-0">
 						<div class="mb-2 text-sm font-medium">Recent detected opportunities</div>
-						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
 							@table.Table(table.Props{Class: "min-w-[820px] table-fixed"}) {
 								@table.Header() {
 									@table.Row() {
@@ -510,7 +636,7 @@ templ HistoryCard(history HistoryView) {
 												<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.ExpectedNet }</span>
 											}
 											@table.Cell(table.CellProps{Class: "align-top"}) {
-												@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+												@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
 													{ row.Decision }
 												}
 											}
@@ -530,17 +656,24 @@ templ HistoryCard(history HistoryView) {
 }
 
 templ TermsSourceCard(rows []TermsSourceRow) {
-	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
 		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.FileText(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
 			@card.Title() {
 				Terms sources
 			}
 			@card.Description() {
 				Authenticated trading terms fall back per exchange market when credentials are absent or rejected.
 			}
+				</div>
+			</div>
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
-			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[720px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
@@ -574,7 +707,7 @@ templ TermsSourceCard(rows []TermsSourceRow) {
 									<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
 								}
 								@table.Cell(table.CellProps{Class: "align-top"}) {
-									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
 										{ row.Source }
 									}
 								}
@@ -597,17 +730,24 @@ templ TermsSourceCard(rows []TermsSourceRow) {
 }
 
 templ BalanceCard(rows []BalanceRow) {
-	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
 		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.Wallet(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
 			@card.Title() {
 				Paper wallets
 			}
 			@card.Description() {
 				Simulated balances used to bound autonomous decisions.
 			}
+				</div>
+			</div>
 		}
 		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
-			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[520px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
@@ -639,6 +779,356 @@ templ BalanceCard(rows []BalanceRow) {
 								}
 								@table.Cell(table.CellProps{Class: "align-top"}) {
 									<span class="text-xs text-muted-foreground">{ row.Source }</span>
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ ConnectionDashboard(connection ConnectionTermsView) {
+	<div id="connections-dashboard" class="grid min-w-0 gap-3">
+		@ConnectionSummaryCard(connection.SummaryRows, connection.LastUpdated)
+		@ConnectionRulesCard(connection.RuleRows)
+		<section class="grid min-w-0 gap-3 2xl:grid-cols-2">
+			@ConnectionBalancesCard(connection.BalanceRows)
+			@ConnectionTransferFeesCard(connection.TransferRows)
+		</section>
+	</div>
+}
+
+templ ConnectionSummaryCard(rows []ConnectionSummaryRow, lastUpdated string) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.Unplug(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
+						@card.Title() {
+							Exchange connections
+						}
+						@card.Description() {
+							Read-only credential state and terms freshness from environment-configured exchanges.
+						}
+					</div>
+				</div>
+				<span class="font-mono text-xs text-muted-foreground">{ lastUpdated }</span>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[900px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Source
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Status
+							}
+							@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+								Updated
+							}
+							@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+								Expires
+							}
+							@table.Head(table.HeadProps{Class: "w-[250px]"}) {
+								Message
+							}
+						}
+					}
+					@table.Body() {
+						if len(rows) == 0 {
+							@table.Row() {
+								<td colspan="7" class="p-4 text-sm text-muted-foreground">
+									No exchange terms have been loaded yet.
+								</td>
+							}
+						}
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-medium">{ row.Exchange }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Source }
+									}
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap text-xs">{ row.Status }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Updated }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Expires }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="block truncate text-xs text-muted-foreground">{ row.Message }</span>
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ ConnectionRulesCard(rows []ConnectionRuleRow) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.FileText(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
+					@card.Title() {
+						Execution terms
+					}
+					@card.Description() {
+						Fees and market rules used by the paper execution engine.
+					}
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[980px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+								Maker
+							}
+							@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+								Taker
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Min base
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Min notional
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Step
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Tick
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Source
+							}
+						}
+					}
+					@table.Body() {
+						if len(rows) == 0 {
+							@table.Row() {
+								<td colspan="9" class="p-4 text-sm text-muted-foreground">
+									No execution terms have been loaded yet.
+								</td>
+							}
+						}
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-medium">{ row.Exchange }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.MakerFee }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.TakerFee }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.MinBase }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.MinNotional }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.StepSize }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.TickSize }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Source }
+									}
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ ConnectionBalancesCard(rows []ConnectionBalanceRow) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.WalletCards(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
+					@card.Title() {
+						Execution balances
+					}
+					@card.Description() {
+						Base and quote balances that cap paper route sizing.
+					}
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[620px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+								Asset
+							}
+							@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+								Amount
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Source
+							}
+						}
+					}
+					@table.Body() {
+						if len(rows) == 0 {
+							@table.Row() {
+								<td colspan="5" class="p-4 text-sm text-muted-foreground">
+									No execution balances have been loaded yet.
+								</td>
+							}
+						}
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-medium">{ row.Exchange }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-mono text-xs">{ row.Asset }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Amount }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Source }
+									}
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ ConnectionTransferFeesCard(rows []ConnectionTransferRow) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.ArrowLeftRight(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
+					@card.Title() {
+						Transfer fees
+					}
+					@card.Description() {
+						Available withdrawal fee inputs by exchange asset.
+					}
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[620px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+								Asset
+							}
+							@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+								Fee
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Source
+							}
+						}
+					}
+					@table.Body() {
+						if len(rows) == 0 {
+							@table.Row() {
+								<td colspan="5" class="p-4 text-sm text-muted-foreground">
+									No transfer-fee inputs have been loaded yet.
+								</td>
+							}
+						}
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-medium">{ row.Exchange }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-mono text-xs">{ row.Asset }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Fee }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Source }
+									}
 								}
 							}
 						}

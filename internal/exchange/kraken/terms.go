@@ -90,10 +90,6 @@ func (p *Provider) fetchBalances(ctx context.Context, now time.Time) (map[string
 	if len(response.Errors) > 0 {
 		return nil, fmt.Errorf("kraken balance error: %s", strings.Join(response.Errors, "; "))
 	}
-	if len(response.Result) == 0 {
-		return nil, fmt.Errorf("kraken returned no balances")
-	}
-
 	balances := make(map[string]decimal.Decimal, len(response.Result))
 	for asset, raw := range response.Result {
 		value, err := raw.BalanceDecimal()
@@ -103,7 +99,7 @@ func (p *Provider) fetchBalances(ctx context.Context, now time.Time) (map[string
 		balances[asset] = value
 	}
 	if len(balances) == 0 {
-		return nil, fmt.Errorf("kraken returned no non-zero balances")
+		return map[string]decimal.Decimal{}, nil
 	}
 	return balances, nil
 }

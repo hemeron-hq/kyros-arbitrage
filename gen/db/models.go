@@ -52,3 +52,9 @@ type Opportunity struct {
 	Partial           int64  `json:"partial"`
 	RecordedAt        string `json:"recorded_at"`
 }
+
+type RiskSetting struct {
+	ID        int64  `json:"id"`
+	Mode      string `json:"mode"`
+	UpdatedAt string `json:"updated_at"`
+}

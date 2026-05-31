@@ -31,6 +31,8 @@ type LiveDashboardView struct {
 	OpportunityRows []OpportunityRow
 	TermsRows       []TermsSourceRow
 	BalanceRows     []BalanceRow
+	Risk            RiskView
+	Connection      ConnectionTermsView
 	History         HistoryView
 	LiveFeeds       int
 	StaleFeeds      int
@@ -115,5 +117,65 @@ type BalanceRow struct {
 	Exchange string
 	Asset    string
 	Amount   string
+	Source   string
+}
+
+type RiskView struct {
+	Mode               string
+	Status             string
+	StatusClass        string
+	Reasons            []string
+	MaxSpread          string
+	MaxLatencyPenalty  string
+	MaxDrawdown        string
+	Reserve            string
+	ConservativeActive bool
+	BalancedActive     bool
+	AggressiveActive   bool
+}
+
+type ConnectionTermsView struct {
+	SummaryRows  []ConnectionSummaryRow
+	RuleRows     []ConnectionRuleRow
+	BalanceRows  []ConnectionBalanceRow
+	TransferRows []ConnectionTransferRow
+	LastUpdated  string
+}
+
+type ConnectionSummaryRow struct {
+	Exchange string
+	Market   string
+	Source   string
+	Status   string
+	Updated  string
+	Expires  string
+	Message  string
+}
+
+type ConnectionRuleRow struct {
+	Exchange    string
+	Market      string
+	MakerFee    string
+	TakerFee    string
+	MinBase     string
+	MinNotional string
+	StepSize    string
+	TickSize    string
+	Source      string
+}
+
+type ConnectionBalanceRow struct {
+	Exchange string
+	Market   string
+	Asset    string
+	Amount   string
+	Source   string
+}
+
+type ConnectionTransferRow struct {
+	Exchange string
+	Market   string
+	Asset    string
+	Fee      string
 	Source   string
 }

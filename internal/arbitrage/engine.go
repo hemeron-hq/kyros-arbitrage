@@ -9,6 +9,7 @@ import (
 	"github.com/govalues/decimal"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/risk"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 )
 
@@ -17,17 +18,19 @@ type Engine struct {
 	termsStore        *terms.Store
 	ledger            portfolio.Store
 	latency           *LatencyModel
+	riskController    *risk.Controller
 	executedIDs       map[string]struct{}
 	sessionBestNet    Opportunity
 	hasSessionBestNet bool
 }
 
-func NewEngine(termsStore *terms.Store, ledger portfolio.Store) *Engine {
+func NewEngine(termsStore *terms.Store, ledger portfolio.Store, riskController *risk.Controller) *Engine {
 	return &Engine{
-		termsStore:  termsStore,
-		ledger:      ledger,
-		latency:     NewLatencyModel(5 * time.Minute),
-		executedIDs: make(map[string]struct{}),
+		termsStore:     termsStore,
+		ledger:         ledger,
+		latency:        NewLatencyModel(5 * time.Minute),
+		riskController: riskController,
+		executedIDs:    make(map[string]struct{}),
 	}
 }
 
@@ -220,6 +223,23 @@ func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.Orde
 	opportunity.ExpectedNetProfit = selection.ExpectedNetProfit
 	opportunity.ExpectedNetBPS = selection.ExpectedNetBPS
 	opportunity.Partial = selection.Partial
+	rebalanceCost, rebalanceOK := rebalanceCost(market, selection.Depth, buyTerms, sellTerms)
+	if !rebalanceOK {
+		opportunity.Decision = DecisionSkip
+		opportunity.ReasonCode = ReasonTransferFeeMissing
+		return opportunity
+	}
+	opportunity.RebalanceCost = rebalanceCost
+	if rebalanceCost.IsPos() {
+		net, err := opportunity.ExpectedNetProfit.Sub(rebalanceCost)
+		if err != nil {
+			opportunity.Decision = DecisionSkip
+			opportunity.ReasonCode = ReasonNegativeNet
+			return opportunity
+		}
+		opportunity.ExpectedNetProfit = net
+		opportunity.ExpectedNetBPS = bps(net, opportunity.BuyNotional)
+	}
 
 	topGross := mul(selection.Depth.Base, mustSub(topBid.Price, topAsk.Price))
 	slippageCost, err := topGross.Sub(selection.GrossProfit)
@@ -228,9 +248,15 @@ func (e *Engine) evaluatePair(buy exchange.OrderBookSnapshot, sell exchange.Orde
 		opportunity.SlippageBPS = bps(slippageCost, selection.Depth.BuyNotional)
 	}
 
-	if !selection.ExpectedNetProfit.IsPos() {
+	if !opportunity.ExpectedNetProfit.IsPos() {
 		opportunity.Decision = DecisionSkip
 		opportunity.ReasonCode = ReasonNegativeNet
+		return opportunity
+	}
+	riskDecision := e.evaluateRisk(opportunity, quoteBalance, baseBalance)
+	if !riskDecision.Allowed {
+		opportunity.Decision = DecisionSkip
+		opportunity.ReasonCode = riskDecision.Reason
 		return opportunity
 	}
 
@@ -474,6 +500,71 @@ func (e *Engine) previewNoGrossEdge(opportunity *Opportunity, topAsk exchange.Pr
 	}
 	opportunity.ExpectedNetProfit = net
 	opportunity.ExpectedNetBPS = bps(net, opportunity.BuyNotional)
+}
+
+func rebalanceCost(market exchange.Market, depth DepthResult, buyTerms terms.Snapshot, sellTerms terms.Snapshot) (decimal.Decimal, bool) {
+	if !depth.Base.IsPos() || !depth.BuyNotional.IsPos() {
+		return decimal.Zero, false
+	}
+	baseFee, baseOK := transferFeeFor(buyTerms, market.Base)
+	quoteFee, quoteOK := transferFeeFor(sellTerms, market.Quote)
+	if !baseOK || !quoteOK {
+		return decimal.Zero, false
+	}
+	avgBuyPrice, err := depth.BuyNotional.Quo(depth.Base)
+	if err != nil {
+		return decimal.Zero, false
+	}
+	baseCost, err := baseFee.Mul(avgBuyPrice)
+	if err != nil {
+		return decimal.Zero, false
+	}
+	total, err := baseCost.Add(quoteFee)
+	if err != nil {
+		return decimal.Zero, false
+	}
+	return total, true
+}
+
+func transferFeeFor(snapshot terms.Snapshot, asset string) (decimal.Decimal, bool) {
+	if snapshot.TransferFees == nil {
+		return decimal.Zero, false
+	}
+	value, ok := snapshot.TransferFees[asset]
+	if !ok {
+		return decimal.Zero, false
+	}
+	if snapshot.Source != terms.SourceFallback && value.IsZero() {
+		return decimal.Zero, false
+	}
+	return value, true
+}
+
+func (e *Engine) evaluateRisk(opportunity Opportunity, quoteBalance decimal.Decimal, baseBalance decimal.Decimal) risk.Decision {
+	if e.riskController == nil {
+		return risk.Decision{Allowed: true}
+	}
+	buyCost, err := opportunity.BuyNotional.Add(opportunity.BuyFee)
+	if err != nil {
+		return risk.Decision{Allowed: false, Reason: risk.ReasonReserve}
+	}
+	quoteAfter, err := quoteBalance.Sub(buyCost)
+	if err != nil {
+		return risk.Decision{Allowed: false, Reason: risk.ReasonReserve}
+	}
+	baseAfter, err := baseBalance.Sub(opportunity.BaseSize)
+	if err != nil {
+		return risk.Decision{Allowed: false, Reason: risk.ReasonReserve}
+	}
+	return e.riskController.Evaluate(risk.Candidate{
+		GrossBPS:          opportunity.GrossBPS,
+		LatencyPenaltyBPS: opportunity.LatencyPenaltyBPS,
+		SessionPNL:        e.ledger.Stats().SessionPNL,
+		BuyQuoteBalance:   quoteBalance,
+		BuyQuoteAfter:     quoteAfter,
+		SellBaseBalance:   baseBalance,
+		SellBaseAfter:     baseAfter,
+	})
 }
 
 func (e *Engine) maxBaseByBalance(market exchange.Market, topAsk decimal.Decimal, buyExchange exchange.ID, sellExchange exchange.ID, buyFeeRate decimal.Decimal) (decimal.Decimal, bool) {
