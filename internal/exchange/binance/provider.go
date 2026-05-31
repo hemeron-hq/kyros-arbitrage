@@ -21,6 +21,8 @@ const (
 )
 
 type Provider struct {
+	APIKey      string
+	APISecret   string
 	HTTPClient  *http.Client
 	RESTBaseURL string
 	WSBaseURL   string
@@ -28,18 +30,31 @@ type Provider struct {
 }
 
 var _ exchange.MarketDataProvider = (*Provider)(nil)
+var _ exchange.TermsClient = (*Provider)(nil)
 
-func New() *Provider {
+type Option func(*Provider)
+
+func WithCredentials(apiKey string, apiSecret string) Option {
+	return func(p *Provider) {
+		p.APIKey = strings.TrimSpace(apiKey)
+		p.APISecret = strings.TrimSpace(apiSecret)
+	}
+}
+
+func New(options ...Option) *Provider {
 	provider := new(Provider)
 	provider.HTTPClient = http.DefaultClient
 	provider.RESTBaseURL = defaultRESTBaseURL
 	provider.WSBaseURL = defaultWSBaseURL
 	provider.Now = time.Now
+	for _, option := range options {
+		option(provider)
+	}
 	return provider
 }
 
-func (p *Provider) Venue() exchange.Venue {
-	return exchange.VenueBinance
+func (p *Provider) Exchange() exchange.ID {
+	return exchange.Binance
 }
 
 func (p *Provider) Stream(ctx context.Context, binding exchange.Binding, depth int, out chan<- exchange.OrderBookSnapshot) error {
@@ -129,7 +144,7 @@ func ParseDepth(payload []byte, binding exchange.Binding, depth int, transport e
 	}
 
 	return exchange.OrderBookSnapshot{
-		Venue:      exchange.VenueBinance,
+		Exchange:   exchange.Binance,
 		Market:     binding.Market,
 		Bids:       bids,
 		Asks:       asks,

@@ -28,12 +28,12 @@ func DefaultServiceConfig() ServiceConfig {
 
 type Service struct {
 	store     *Store
-	providers map[exchange.Venue]exchange.MarketDataProvider
+	providers map[exchange.ID]exchange.MarketDataProvider
 	bindings  []exchange.Binding
 	cfg       ServiceConfig
 }
 
-func NewService(store *Store, providers map[exchange.Venue]exchange.MarketDataProvider, bindings []exchange.Binding, cfg ServiceConfig) *Service {
+func NewService(store *Store, providers map[exchange.ID]exchange.MarketDataProvider, bindings []exchange.Binding, cfg ServiceConfig) *Service {
 	return &Service{
 		store:     store,
 		providers: providers,
@@ -46,7 +46,7 @@ func (s *Service) Start(ctx context.Context) {
 	for _, binding := range s.bindings {
 		s.store.Register(binding)
 
-		provider := s.providers[binding.Venue]
+		provider := s.providers[binding.Exchange]
 		if provider == nil {
 			s.store.SetStatus(binding, exchange.StatusError, exchange.TransportNone, "provider not registered")
 			continue

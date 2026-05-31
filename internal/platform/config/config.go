@@ -21,8 +21,12 @@ func (e Environment) IsDevelopment() bool {
 }
 
 type Config struct {
-	Environment Environment `env:"ENV" envDefault:"development"`
-	Port        uint16      `env:"PORT" envDefault:"8090"`
+	Environment      Environment `env:"ENV" envDefault:"development"`
+	Port             uint16      `env:"PORT" envDefault:"8090"`
+	BinanceAPIKey    string      `env:"BINANCE_API_KEY"`
+	BinanceAPISecret string      `env:"BINANCE_API_SECRET"`
+	KrakenAPIKey     string      `env:"KRAKEN_API_KEY"`
+	KrakenAPISecret  string      `env:"KRAKEN_API_SECRET"`
 }
 
 func (c Config) Addr() string {

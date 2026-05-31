@@ -10,12 +10,15 @@ import (
 
 	json "github.com/goccy/go-json"
 	"github.com/govalues/decimal"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/arbitrage"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/binance"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/kraken"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/market"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/platform/config"
-	"github.com/hemeron-hq/kyros-arbitrage/internal/strategy"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio/paper"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/view"
 	"github.com/starfederation/datastar-go/datastar"
 	"github.com/templui/templui/utils"
@@ -26,12 +29,16 @@ const (
 	displayTimeLayout = "Jan 2, 2006 15:04:05"
 	readHeaderTimeout = 5 * time.Second
 	uiPatchInterval   = 250 * time.Millisecond
+	decisionInterval  = 500 * time.Millisecond
 )
 
 type Server struct {
 	cfg                  config.Config
 	startedAt            time.Time
 	marketStore          *market.Store
+	termsStore           *terms.Store
+	ledger               portfolio.Store
+	decisionEngine       *arbitrage.Engine
 	disableMarketService bool
 }
 
@@ -51,28 +58,47 @@ func WithMarketServiceDisabled() Option {
 
 func New(cfg config.Config, opts ...Option) *http.Server {
 	marketConfig := market.DefaultServiceConfig()
+	now := time.Now()
+	termsStore := terms.NewStore(now)
+	ledger := paper.NewLedger()
 	app := &Server{
 		cfg:         cfg,
-		startedAt:   time.Now(),
+		startedAt:   now,
 		marketStore: market.NewStore(marketConfig.StaleAfter),
+		termsStore:  termsStore,
+		ledger:      ledger,
 	}
+	app.decisionEngine = arbitrage.NewEngine(app.termsStore, app.ledger)
 	for _, opt := range opts {
 		opt(app)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	binanceProvider := binance.New(binance.WithCredentials(cfg.BinanceAPIKey, cfg.BinanceAPISecret))
+	krakenProvider := kraken.New(kraken.WithCredentials(cfg.KrakenAPIKey, cfg.KrakenAPISecret))
+	termsService := terms.NewService(
+		app.termsStore,
+		map[exchange.ID]exchange.TermsClient{
+			exchange.Binance: binanceProvider,
+			exchange.Kraken:  krakenProvider,
+		},
+		exchange.DefaultBindings(),
+		terms.DefaultServiceConfig(),
+	)
+	termsService.Start(ctx)
 	if !app.disableMarketService {
 		service := market.NewService(
 			app.marketStore,
-			map[exchange.Venue]exchange.MarketDataProvider{
-				exchange.VenueBinance: binance.New(),
-				exchange.VenueKraken:  kraken.New(),
+			map[exchange.ID]exchange.MarketDataProvider{
+				exchange.Binance: binanceProvider,
+				exchange.Kraken:  krakenProvider,
 			},
 			exchange.DefaultBindings(),
 			marketConfig,
 		)
 		service.Start(ctx)
 	}
+	go app.runDecisionLoop(ctx)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr(),
@@ -82,6 +108,31 @@ func New(cfg config.Config, opts ...Option) *http.Server {
 	httpServer.RegisterOnShutdown(cancel)
 
 	return httpServer
+}
+
+func (s *Server) runDecisionLoop(ctx context.Context) {
+	events := s.marketStore.Subscribe(ctx.Done())
+	ticker := time.NewTicker(decisionInterval)
+	defer ticker.Stop()
+
+	dirty := true
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-events:
+			if !ok {
+				return
+			}
+			dirty = true
+		case now := <-ticker.C:
+			if !dirty {
+				continue
+			}
+			s.decisionEngine.Evaluate(s.marketStore.Snapshot(), now)
+			dirty = false
+		}
+	}
 }
 
 func (s *Server) routes() http.Handler {
@@ -246,7 +297,7 @@ func (s *Server) liveDashboardView(now time.Time) view.LiveDashboardView {
 			staleFeeds++
 		}
 		rows = append(rows, view.FeedRow{
-			Venue:       titleCase(string(feedRow.Venue)),
+			Exchange:    titleCase(string(feedRow.Exchange)),
 			Market:      feedRow.Market,
 			Status:      string(feedRow.Status),
 			StatusClass: statusClass(feedRow.Status),
@@ -263,37 +314,58 @@ func (s *Server) liveDashboardView(now time.Time) view.LiveDashboardView {
 		})
 	}
 
-	routes := strategy.FindRoutes(snapshots)
-	spreads := make([]view.SpreadRow, 0, len(routes))
-	for _, route := range routes {
-		spreads = append(spreads, view.SpreadRow{
-			Route:          titleCase(string(route.BuyVenue)) + " -> " + titleCase(string(route.SellVenue)),
-			Market:         route.Market,
-			GrossSpread:    displayQuote(route.GrossSpread),
-			GrossSpreadBPS: displayBPS(route.GrossSpreadBPS),
-			MaxBaseSize:    displayBase(route.MaxBaseSize),
-			State:          routeState(route),
+	decisionSnapshot := s.decisionEngine.Project(snapshots, now)
+	opportunities := make([]view.OpportunityRow, 0, len(decisionSnapshot.Opportunities))
+	for _, opportunity := range decisionSnapshot.Opportunities {
+		opportunities = append(opportunities, view.OpportunityRow{
+			Route:       displayRoute(opportunity.BuyExchange, opportunity.SellExchange),
+			Market:      displayMarket(opportunity.Market),
+			Size:        displayBase(opportunity.BaseSize),
+			GrossPnl:    displaySignedQuote(opportunity.GrossProfit),
+			Fees:        displayQuote(opportunity.TradingFees),
+			Slippage:    displayQuote(opportunity.SlippageCost),
+			Latency:     displayQuote(opportunity.LatencyPenalty),
+			Rebalance:   displayQuote(opportunity.RebalanceCost),
+			ExpectedNet: displaySignedQuote(opportunity.ExpectedNetProfit),
+			Decision:    string(opportunity.Decision),
+			Reason:      opportunity.ReasonCode,
 		})
 	}
-	if len(spreads) == 0 {
-		spreads = append(spreads, view.SpreadRow{
-			Route:          "-",
-			Market:         "BTC/USDT",
-			GrossSpread:    "-",
-			GrossSpreadBPS: "-",
-			MaxBaseSize:    "-",
-			State:          "waiting for live books",
+	termsRows := make([]view.TermsSourceRow, 0, len(decisionSnapshot.TermsHealth))
+	for _, row := range decisionSnapshot.TermsHealth {
+		termsRows = append(termsRows, view.TermsSourceRow{
+			Exchange: titleCase(string(row.Exchange)),
+			Market:   displayMarket(row.Market),
+			Source:   string(row.Source),
+			Status:   displayFresh(row.Fresh),
+			Message:  row.Message,
+			Updated:  displayTimestamp(row.UpdatedAt),
 		})
 	}
+	balanceRows := make([]view.BalanceRow, 0, len(decisionSnapshot.Balances))
+	for _, row := range decisionSnapshot.Balances {
+		balanceRows = append(balanceRows, view.BalanceRow{
+			Exchange: titleCase(string(row.Exchange)),
+			Asset:    row.Asset,
+			Amount:   displayAssetAmount(row.Asset, row.Amount),
+			Source:   string(row.Source),
+		})
+	}
+	bestNet, bestState := bestOpportunity(opportunities)
 
 	return view.LiveDashboardView{
 		FeedRows:        rows,
-		SpreadRows:      spreads,
+		OpportunityRows: opportunities,
+		TermsRows:       termsRows,
+		BalanceRows:     balanceRows,
 		LiveFeeds:       liveFeeds,
 		StaleFeeds:      staleFeeds,
-		BestSpread:      bestSpread(spreads),
-		BestSpreadState: spreads[0].State,
-		LastUpdated:     displayTimestamp(now),
+		BestNetPnl:      bestNet,
+		BestNetState:    bestState,
+		SessionPnl:      displaySignedQuote(decisionSnapshot.SessionPNL),
+		Executed:        strconv.Itoa(decisionSnapshot.Executed),
+		Rejected:        strconv.Itoa(decisionSnapshot.Rejected),
+		LastUpdated:     displayTimestamp(decisionSnapshot.LastUpdated),
 	}
 }
 
@@ -387,8 +459,24 @@ func displayQuote(value decimal.Decimal) string {
 	return fmt.Sprintf("%.2f", value)
 }
 
+func displaySignedQuote(value decimal.Decimal) string {
+	if value.IsPos() {
+		return "+" + displayQuote(value)
+	}
+	return displayQuote(value)
+}
+
 func displayBase(value decimal.Decimal) string {
 	return trimTrailingZeros(fmt.Sprintf("%.8f", value))
+}
+
+func displayAssetAmount(asset string, value decimal.Decimal) string {
+	switch asset {
+	case "BTC":
+		return displayBase(value)
+	default:
+		return displayQuote(value)
+	}
 }
 
 func displayBPS(value decimal.Decimal) string {
@@ -422,16 +510,30 @@ func displaySequence(value int64) string {
 	return strconv.FormatInt(value, 10)
 }
 
-func routeState(route strategy.Route) string {
-	if !route.Executable {
-		return "no gross edge"
-	}
-	return "gross edge"
-}
-
-func bestSpread(rows []view.SpreadRow) string {
-	if len(rows) == 0 {
+func displayRoute(buyExchange exchange.ID, sellExchange exchange.ID) string {
+	if buyExchange == "" || sellExchange == "" {
 		return "-"
 	}
-	return rows[0].GrossSpread
+	return titleCase(string(buyExchange)) + " -> " + titleCase(string(sellExchange))
+}
+
+func displayMarket(market exchange.Market) string {
+	if market.Base == "" || market.Quote == "" {
+		return "BTC/USDT"
+	}
+	return market.ID()
+}
+
+func displayFresh(fresh bool) string {
+	if fresh {
+		return "fresh"
+	}
+	return "stale"
+}
+
+func bestOpportunity(rows []view.OpportunityRow) (string, string) {
+	if len(rows) == 0 {
+		return "-", "waiting for live books"
+	}
+	return rows[0].ExpectedNet, rows[0].Reason
 }

@@ -9,15 +9,15 @@ import (
 	"github.com/govalues/decimal"
 )
 
-type Venue string
+type ID string
 
 const (
-	VenueBinance Venue = "binance"
-	VenueKraken  Venue = "kraken"
+	Binance ID = "binance"
+	Kraken  ID = "kraken"
 )
 
 type Provider interface {
-	Venue() Venue
+	Exchange() ID
 }
 
 type MarketDataProvider interface {
@@ -53,7 +53,7 @@ const (
 )
 
 type OrderRequest struct {
-	Venue         Venue
+	Exchange      ID
 	Market        Market
 	Side          OrderSide
 	Type          OrderType
@@ -63,7 +63,7 @@ type OrderRequest struct {
 }
 
 type OrderResult struct {
-	Venue          Venue
+	Exchange       ID
 	Market         Market
 	OrderID        string
 	ClientOrderID  string
@@ -110,7 +110,7 @@ func (m Market) ID() string {
 }
 
 type Binding struct {
-	Venue           Venue
+	Exchange        ID
 	Market          Market
 	WebSocketSymbol string
 	RESTSymbol      string
@@ -118,16 +118,16 @@ type Binding struct {
 }
 
 func (b Binding) Key() Key {
-	return Key{Venue: b.Venue, MarketID: b.Market.ID()}
+	return Key{Exchange: b.Exchange, MarketID: b.Market.ID()}
 }
 
 type Key struct {
-	Venue    Venue
+	Exchange ID
 	MarketID string
 }
 
 func (k Key) String() string {
-	return string(k.Venue) + ":" + k.MarketID
+	return string(k.Exchange) + ":" + k.MarketID
 }
 
 type PriceLevel struct {
@@ -157,7 +157,7 @@ func NewPriceLevel(priceText, quantityText string) (PriceLevel, error) {
 }
 
 type OrderBookSnapshot struct {
-	Venue        Venue
+	Exchange     ID
 	Market       Market
 	Bids         []PriceLevel
 	Asks         []PriceLevel
@@ -171,7 +171,7 @@ type OrderBookSnapshot struct {
 }
 
 func (s OrderBookSnapshot) Key() Key {
-	return Key{Venue: s.Venue, MarketID: s.Market.ID()}
+	return Key{Exchange: s.Exchange, MarketID: s.Market.ID()}
 }
 
 func (s OrderBookSnapshot) Clone() OrderBookSnapshot {
@@ -203,14 +203,14 @@ func DefaultBindings() []Binding {
 	btcUSDT := Market{Base: "BTC", Quote: "USDT"}
 	return []Binding{
 		{
-			Venue:           VenueBinance,
+			Exchange:        Binance,
 			Market:          btcUSDT,
 			WebSocketSymbol: "BTCUSDT",
 			RESTSymbol:      "BTCUSDT",
 			Enabled:         true,
 		},
 		{
-			Venue:           VenueKraken,
+			Exchange:        Kraken,
 			Market:          btcUSDT,
 			WebSocketSymbol: "BTC/USDT",
 			RESTSymbol:      "XBTUSDT",

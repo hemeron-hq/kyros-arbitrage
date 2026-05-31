@@ -11,23 +11,23 @@ import (
 var ErrUnsupportedProvider = errors.New("order provider unsupported")
 
 type Service struct {
-	providers map[exchange.Venue]exchange.OrderPlacer
+	providers map[exchange.ID]exchange.OrderPlacer
 }
 
-func NewService(providers map[exchange.Venue]exchange.OrderPlacer) *Service {
-	copied := make(map[exchange.Venue]exchange.OrderPlacer, len(providers))
-	for venue, provider := range providers {
+func NewService(providers map[exchange.ID]exchange.OrderPlacer) *Service {
+	copied := make(map[exchange.ID]exchange.OrderPlacer, len(providers))
+	for exchangeID, provider := range providers {
 		if provider != nil {
-			copied[venue] = provider
+			copied[exchangeID] = provider
 		}
 	}
 	return &Service{providers: copied}
 }
 
 func (s *Service) Place(ctx context.Context, request exchange.OrderRequest) (exchange.OrderResult, error) {
-	provider := s.providers[request.Venue]
+	provider := s.providers[request.Exchange]
 	if provider == nil {
-		return exchange.OrderResult{}, fmt.Errorf("%w: %s", ErrUnsupportedProvider, request.Venue)
+		return exchange.OrderResult{}, fmt.Errorf("%w: %s", ErrUnsupportedProvider, request.Exchange)
 	}
 	return provider.PlaceOrder(ctx, request)
 }

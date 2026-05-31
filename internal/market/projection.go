@@ -11,7 +11,7 @@ type Projection struct {
 }
 
 type FeedProjection struct {
-	Venue     exchange.Venue      `json:"venue"`
+	Exchange  exchange.ID         `json:"exchange"`
 	Market    string              `json:"market"`
 	Status    exchange.FeedStatus `json:"status"`
 	Transport exchange.Transport  `json:"transport"`
@@ -39,7 +39,7 @@ func Project(snapshots []exchange.OrderBookSnapshot, now time.Time) Projection {
 
 func projectFeed(snapshot exchange.OrderBookSnapshot, now time.Time) FeedProjection {
 	projection := FeedProjection{
-		Venue:     snapshot.Venue,
+		Exchange:  snapshot.Exchange,
 		Market:    snapshot.Market.ID(),
 		Status:    snapshot.Status,
 		Transport: snapshot.Transport,
@@ -62,6 +62,9 @@ func projectFeed(snapshot exchange.OrderBookSnapshot, now time.Time) FeedProject
 	}
 	if snapshot.Latency > 0 {
 		latency := snapshot.Latency.Milliseconds()
+		projection.LatencyMS = &latency
+	} else if !snapshot.ExchangeTime.IsZero() && snapshot.ReceivedAt.After(snapshot.ExchangeTime) {
+		latency := snapshot.ReceivedAt.Sub(snapshot.ExchangeTime).Milliseconds()
 		projection.LatencyMS = &latency
 	}
 

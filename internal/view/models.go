@@ -28,16 +28,21 @@ type HeartbeatView struct {
 
 type LiveDashboardView struct {
 	FeedRows        []FeedRow
-	SpreadRows      []SpreadRow
+	OpportunityRows []OpportunityRow
+	TermsRows       []TermsSourceRow
+	BalanceRows     []BalanceRow
 	LiveFeeds       int
 	StaleFeeds      int
-	BestSpread      string
-	BestSpreadState string
+	BestNetPnl      string
+	BestNetState    string
+	SessionPnl      string
+	Executed        string
+	Rejected        string
 	LastUpdated     string
 }
 
 type FeedRow struct {
-	Venue       string
+	Exchange    string
 	Market      string
 	Status      string
 	StatusClass string
@@ -53,11 +58,32 @@ type FeedRow struct {
 	Message     string
 }
 
-type SpreadRow struct {
-	Route          string
-	Market         string
-	GrossSpread    string
-	GrossSpreadBPS string
-	MaxBaseSize    string
-	State          string
+type OpportunityRow struct {
+	Route       string
+	Market      string
+	Size        string
+	GrossPnl    string
+	Fees        string
+	Slippage    string
+	Latency     string
+	Rebalance   string
+	ExpectedNet string
+	Decision    string
+	Reason      string
+}
+
+type TermsSourceRow struct {
+	Exchange string
+	Market   string
+	Source   string
+	Status   string
+	Message  string
+	Updated  string
+}
+
+type BalanceRow struct {
+	Exchange string
+	Asset    string
+	Amount   string
+	Source   string
 }

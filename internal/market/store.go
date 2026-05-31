@@ -56,7 +56,7 @@ func (s *Store) SetStatus(binding exchange.Binding, status exchange.FeedStatus, 
 
 	key := binding.Key()
 	snapshot := s.snapshots[key]
-	snapshot.Venue = binding.Venue
+	snapshot.Exchange = binding.Exchange
 	snapshot.Market = binding.Market
 	snapshot.Status = status
 	snapshot.Transport = transport
@@ -80,7 +80,7 @@ func (s *Store) SetStatusIfNotFresh(binding exchange.Binding, status exchange.Fe
 		return
 	}
 
-	snapshot.Venue = binding.Venue
+	snapshot.Exchange = binding.Exchange
 	snapshot.Market = binding.Market
 	snapshot.Status = status
 	snapshot.Transport = transport
@@ -139,7 +139,7 @@ func (s *Store) Snapshot() []exchange.OrderBookSnapshot {
 
 	sort.Slice(snapshots, func(i, j int) bool {
 		if snapshots[i].Market.ID() == snapshots[j].Market.ID() {
-			return snapshots[i].Venue < snapshots[j].Venue
+			return snapshots[i].Exchange < snapshots[j].Exchange
 		}
 		return snapshots[i].Market.ID() < snapshots[j].Market.ID()
 	})

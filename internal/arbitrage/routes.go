@@ -1,4 +1,4 @@
-package strategy
+package arbitrage
 
 import (
 	"sort"
@@ -11,8 +11,8 @@ var basisPointMultiplier = decimal.MustNew(10_000, 0)
 
 type Route struct {
 	Market         string
-	BuyVenue       exchange.Venue
-	SellVenue      exchange.Venue
+	BuyExchange    exchange.ID
+	SellExchange   exchange.ID
 	GrossSpread    decimal.Decimal
 	GrossSpreadBPS decimal.Decimal
 	GrossProfit    decimal.Decimal
@@ -20,6 +20,13 @@ type Route struct {
 	AvgBuyPrice    decimal.Decimal
 	AvgSellPrice   decimal.Decimal
 	Executable     bool
+}
+
+type DepthResult struct {
+	Base         decimal.Decimal
+	BuyNotional  decimal.Decimal
+	SellNotional decimal.Decimal
+	OK           bool
 }
 
 func FindRoutes(snapshots []exchange.OrderBookSnapshot) []Route {
@@ -35,7 +42,7 @@ func FindRoutes(snapshots []exchange.OrderBookSnapshot) []Route {
 	for marketID, marketSnapshots := range byMarket {
 		for _, buy := range marketSnapshots {
 			for _, sell := range marketSnapshots {
-				if sell.Venue == buy.Venue {
+				if sell.Exchange == buy.Exchange {
 					continue
 				}
 				route, ok := evaluateRoute(marketID, buy, sell)
@@ -66,9 +73,9 @@ func FindRoutes(snapshots []exchange.OrderBookSnapshot) []Route {
 
 func evaluateRoute(marketID string, buy exchange.OrderBookSnapshot, sell exchange.OrderBookSnapshot) (Route, bool) {
 	route := Route{
-		Market:    marketID,
-		BuyVenue:  buy.Venue,
-		SellVenue: sell.Venue,
+		Market:       marketID,
+		BuyExchange:  buy.Exchange,
+		SellExchange: sell.Exchange,
 	}
 
 	topAsk, askOK := buy.BestAsk()
@@ -86,7 +93,8 @@ func evaluateRoute(marketID string, buy exchange.OrderBookSnapshot, sell exchang
 		route.GrossSpreadBPS = bps
 	}
 
-	base, buyNotional, sellNotional, ok := walkExecutableDepth(buy.Asks, sell.Bids)
+	depth := WalkExecutableDepth(buy.Asks, sell.Bids, decimal.Zero)
+	base, buyNotional, sellNotional, ok := depth.Base, depth.BuyNotional, depth.SellNotional, depth.OK
 	if !ok {
 		return Route{}, false
 	}
@@ -124,7 +132,7 @@ func evaluateRoute(marketID string, buy exchange.OrderBookSnapshot, sell exchang
 	return route, true
 }
 
-func walkExecutableDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel) (decimal.Decimal, decimal.Decimal, decimal.Decimal, bool) {
+func WalkExecutableDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel, maxBase decimal.Decimal) DepthResult {
 	var base decimal.Decimal
 	var buyNotional decimal.Decimal
 	var sellNotional decimal.Decimal
@@ -148,6 +156,13 @@ func walkExecutableDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel)
 		}
 
 		size := askRemaining.Min(bidRemaining)
+		if maxBase.IsPos() {
+			remaining, err := maxBase.Sub(base)
+			if err != nil || !remaining.IsPos() {
+				break
+			}
+			size = size.Min(remaining)
+		}
 		if size.IsZero() {
 			break
 		}
@@ -155,24 +170,24 @@ func walkExecutableDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel)
 		var err error
 		base, err = base.Add(size)
 		if err != nil {
-			return decimal.Zero, decimal.Zero, decimal.Zero, false
+			return DepthResult{OK: false}
 		}
 		buyNotional, err = addMul(buyNotional, size, ask.Price)
 		if err != nil {
-			return decimal.Zero, decimal.Zero, decimal.Zero, false
+			return DepthResult{OK: false}
 		}
 		sellNotional, err = addMul(sellNotional, size, bid.Price)
 		if err != nil {
-			return decimal.Zero, decimal.Zero, decimal.Zero, false
+			return DepthResult{OK: false}
 		}
 
 		askRemaining, err = askRemaining.Sub(size)
 		if err != nil {
-			return decimal.Zero, decimal.Zero, decimal.Zero, false
+			return DepthResult{OK: false}
 		}
 		bidRemaining, err = bidRemaining.Sub(size)
 		if err != nil {
-			return decimal.Zero, decimal.Zero, decimal.Zero, false
+			return DepthResult{OK: false}
 		}
 		if askRemaining.IsZero() {
 			askIndex++
@@ -182,7 +197,12 @@ func walkExecutableDepth(asks []exchange.PriceLevel, bids []exchange.PriceLevel)
 		}
 	}
 
-	return base, buyNotional, sellNotional, true
+	return DepthResult{
+		Base:         base,
+		BuyNotional:  buyNotional,
+		SellNotional: sellNotional,
+		OK:           true,
+	}
 }
 
 func spreadBPS(spread decimal.Decimal, price decimal.Decimal) (decimal.Decimal, bool) {
