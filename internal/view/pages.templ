@@ -1,6 +1,8 @@
 package view
 
 import (
+	"strconv"
+
 	"github.com/templui/templui/components/badge"
 	"github.com/templui/templui/components/button"
 	"github.com/templui/templui/components/card"
@@ -20,6 +22,8 @@ templ Page(model PageModel) {
 					ServerTime: model.Heartbeat.ServerTime,
 					Ticks: model.Heartbeat.Ticks,
 					Streaming: false,
+					LiveFeeds: model.Live.LiveFeeds,
+					StaleFeeds: model.Live.StaleFeeds,
 				}) }
 				data-init="@get('/stream', {openWhenHidden: true})"
 			>
@@ -27,16 +31,16 @@ templ Page(model PageModel) {
 					<div class="space-y-2">
 						<div class="flex flex-wrap items-center gap-2">
 							@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
-								SSR scaffold
+								Realtime feeds
 							}
 							@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
-								BTC/USDT first
+								BTC/USDT
 							}
 						</div>
 						<div>
 							<h1 class="text-2xl font-semibold tracking-normal sm:text-3xl">Kyros Arbitrage</h1>
 							<p class="max-w-2xl text-sm text-muted-foreground">
-								Server-rendered dashboard shell for the Bitcoin arbitrage challenge.
+								Live public order books from Binance and Kraken with polling fallback.
 							</p>
 						</div>
 					</div>
@@ -59,20 +63,15 @@ templ Page(model PageModel) {
 				</header>
 
 				<section class="grid gap-4 md:grid-cols-3">
-					@MetricCard("Feeds", "0 live", "Exchange adapters land next.")
-					@MetricCard("Best spread", "-", "Waiting for public order books.")
-					@MetricCard("Simulated P&L", "$0.00", "No paper trades in scaffold.")
+					@MetricCard("Live feeds", strconv.Itoa(model.Live.LiveFeeds), "Backend market streams.")
+					@MetricCard("Best spread", model.Live.BestSpread, model.Live.BestSpreadState)
+					@MetricCard("Stale/error feeds", strconv.Itoa(model.Live.StaleFeeds), "Fallback and reconnect state.")
 				</section>
 
-				<section class="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-					@VenueCard(model.Venues)
-					<div class="grid gap-4">
-						@HeartbeatPanel(model.Heartbeat)
-						@RoadmapCard()
-					</div>
+				<section class="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+					@LiveDashboard(model.Live)
+					@HeartbeatPanel(model.Heartbeat)
 				</section>
-
-				@OpportunityCard(model.Opportunities)
 			</main>
 		</body>
 	</html>
@@ -100,68 +99,6 @@ templ MetricCard(label string, value string, detail string) {
 	}
 }
 
-templ VenueCard(venues []VenuePlaceholder) {
-	@card.Card() {
-		@card.Header() {
-			@card.Title() {
-				Venue placeholders
-			}
-			@card.Description() {
-				The scaffold reserves the UI shape for direct exchange feeds without connecting yet.
-			}
-		}
-		@card.Content() {
-			@table.Table() {
-				@table.Header() {
-					@table.Row() {
-						@table.Head() {
-							Exchange
-						}
-						@table.Head() {
-							Pair
-						}
-						@table.Head() {
-							Bid
-						}
-						@table.Head() {
-							Ask
-						}
-						@table.Head() {
-							Latency
-						}
-					}
-				}
-				@table.Body() {
-					for _, venue := range venues {
-						@table.Row() {
-							@table.Cell() {
-								<div class="flex items-center gap-2">
-									<span class="font-medium">{ venue.Name }</span>
-									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
-										{ venue.Status }
-									}
-								</div>
-							}
-							@table.Cell() {
-								<span class="font-mono text-xs">{ venue.Pair }</span>
-							}
-							@table.Cell() {
-								{ venue.Bid }
-							}
-							@table.Cell() {
-								{ venue.Ask }
-							}
-							@table.Cell() {
-								{ venue.Latency }
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
 templ HeartbeatPanel(heartbeat HeartbeatView) {
 	@card.Card(card.Props{ID: "heartbeat-panel"}) {
 		@card.Header() {
@@ -171,7 +108,7 @@ templ HeartbeatPanel(heartbeat HeartbeatView) {
 						System heartbeat
 					}
 					@card.Description() {
-						Datastar SSE signal and templ patch smoke test.
+						Server stream and process uptime.
 					}
 				</div>
 				@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Class: "flex items-center gap-2"}) {
@@ -187,7 +124,7 @@ templ HeartbeatPanel(heartbeat HeartbeatView) {
 					<dd class="mt-1 break-words font-mono text-xs" data-text="$serverTime">{ heartbeat.ServerTime }</dd>
 				</div>
 				<div class="rounded-lg border border-border p-3">
-					<dt class="text-muted-foreground">Ticks</dt>
+					<dt class="text-muted-foreground">Heartbeats</dt>
 					<dd class="mt-1 font-mono text-lg font-semibold" data-text="$ticks">{ heartbeat.TicksLabel }</dd>
 				</div>
 				<div class="rounded-lg border border-border p-3">
@@ -203,90 +140,168 @@ templ HeartbeatPanel(heartbeat HeartbeatView) {
 	}
 }
 
-templ RoadmapCard() {
-	@card.Card() {
-		@card.Header() {
-			@card.Title() {
-				Next build steps
-			}
-			@card.Description() {
-				Reserved extension points for the challenge implementation.
-			}
-		}
-		@card.Content() {
-			<ul class="space-y-3 text-sm">
-				<li class="flex items-start gap-2">
-					<span class="mt-2 size-1.5 rounded-full bg-emerald-500"></span>
-					<span>Direct public exchange feeds behind venue adapters.</span>
-				</li>
-				<li class="flex items-start gap-2">
-					<span class="mt-2 size-1.5 rounded-full bg-sky-500"></span>
-					<span>Normalized best bid/ask snapshots for BTC markets.</span>
-				</li>
-				<li class="flex items-start gap-2">
-					<span class="mt-2 size-1.5 rounded-full bg-amber-500"></span>
-					<span>Paper execution with net fees, slippage, and balances.</span>
-				</li>
-			</ul>
-		}
-	}
+templ LiveDashboard(live LiveDashboardView) {
+	<div id="live-dashboard" class="grid gap-4">
+		@FeedCard(live.FeedRows, live.LastUpdated)
+		@SpreadCard(live.SpreadRows)
+	</div>
 }
 
-templ OpportunityCard(rows []OpportunityRow) {
+templ FeedCard(rows []FeedRow, lastUpdated string) {
 	@card.Card() {
 		@card.Header() {
-			@card.Title() {
-				Opportunity queue
-			}
-			@card.Description() {
-				Placeholder table for detected and simulated arbitrage opportunities.
-			}
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					@card.Title() {
+						Exchange feeds
+					}
+					@card.Description() {
+						Top 10 levels from public BTC/USDT books.
+					}
+				</div>
+				<span class="font-mono text-xs text-muted-foreground">{ lastUpdated }</span>
+			</div>
 		}
 		@card.Content() {
-			@table.Table() {
-				@table.Header() {
-					@table.Row() {
-						@table.Head() {
-							Route
-						}
-						@table.Head() {
-							Gross spread
-						}
-						@table.Head() {
-							Net estimate
-						}
-						@table.Head() {
-							Size
-						}
-						@table.Head() {
-							State
+			<div class="overflow-x-auto">
+				@table.Table(table.Props{Class: "min-w-[980px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Bid
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Ask
+							}
+							@table.Head(table.HeadProps{Class: "w-[80px]"}) {
+								Levels
+							}
+							@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+								Age
+							}
+							@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+								Latency
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Transport
+							}
 						}
 					}
-				}
-				@table.Body() {
-					for _, row := range rows {
-						@table.Row() {
-							@table.Cell() {
-								<span class="font-medium">{ row.Route }</span>
-							}
-							@table.Cell() {
-								{ row.GrossSpread }
-							}
-							@table.Cell() {
-								{ row.NetEstimate }
-							}
-							@table.Cell() {
-								{ row.Size }
-							}
-							@table.Cell() {
-								@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
-									{ row.State }
+					@table.Body() {
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<div class="flex min-w-0 items-center gap-2">
+										<span class={ "size-2 rounded-full " + row.StatusClass }></span>
+										<div class="min-w-0">
+											<div class="truncate font-medium">{ row.Venue }</div>
+											<div class="truncate text-xs text-muted-foreground">{ row.Status }</div>
+										</div>
+									</div>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<div class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.Bid }</div>
+									<div class="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">{ row.BidSize }</div>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<div class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.Ask }</div>
+									<div class="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">{ row.AskSize }</div>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Levels }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Age }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Latency }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+										{ row.Transport }
+									}
 								}
 							}
 						}
 					}
 				}
+			</div>
+		}
+	}
+}
+
+templ SpreadCard(rows []SpreadRow) {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() {
+				Gross spread
 			}
+			@card.Description() {
+				Best route from currently live books.
+			}
+		}
+		@card.Content() {
+			<div class="overflow-x-auto">
+				@table.Table(table.Props{Class: "min-w-[760px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[170px]"}) {
+								Route
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Spread
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Bps
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Size
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								State
+							}
+						}
+					}
+					@table.Body() {
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="block truncate font-medium">{ row.Route }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.GrossSpread }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.GrossSpreadBPS }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.MaxBaseSize }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+										{ row.State }
+									}
+								}
+							}
+						}
+					}
+				}
+			</div>
 		}
 	}
 }
