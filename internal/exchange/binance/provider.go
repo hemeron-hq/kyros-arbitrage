@@ -16,17 +16,19 @@ import (
 )
 
 const (
-	defaultRESTBaseURL = "https://api.binance.com"
-	defaultWSBaseURL   = "wss://stream.binance.com:9443"
+	defaultPublicRESTBaseURL = "https://data-api.binance.vision"
+	defaultSignedRESTBaseURL = "https://api.binance.com"
+	defaultWSBaseURL         = "wss://data-stream.binance.vision:443"
 )
 
 type Provider struct {
-	APIKey      string
-	APISecret   string
-	HTTPClient  *http.Client
-	RESTBaseURL string
-	WSBaseURL   string
-	Now         func() time.Time
+	APIKey            string
+	APISecret         string
+	HTTPClient        *http.Client
+	RESTBaseURL       string
+	SignedRESTBaseURL string
+	WSBaseURL         string
+	Now               func() time.Time
 }
 
 var _ exchange.MarketDataProvider = (*Provider)(nil)
@@ -44,7 +46,8 @@ func WithCredentials(apiKey string, apiSecret string) Option {
 func New(options ...Option) *Provider {
 	provider := new(Provider)
 	provider.HTTPClient = http.DefaultClient
-	provider.RESTBaseURL = defaultRESTBaseURL
+	provider.RESTBaseURL = defaultPublicRESTBaseURL
+	provider.SignedRESTBaseURL = defaultSignedRESTBaseURL
 	provider.WSBaseURL = defaultWSBaseURL
 	provider.Now = time.Now
 	for _, option := range options {
@@ -196,7 +199,14 @@ func (p *Provider) restBaseURL() string {
 	if p.RESTBaseURL != "" {
 		return p.RESTBaseURL
 	}
-	return defaultRESTBaseURL
+	return defaultPublicRESTBaseURL
+}
+
+func (p *Provider) signedRestBaseURL() string {
+	if p.SignedRESTBaseURL != "" {
+		return p.SignedRESTBaseURL
+	}
+	return defaultSignedRESTBaseURL
 }
 
 func (p *Provider) wsBaseURL() string {

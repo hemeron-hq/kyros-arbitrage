@@ -174,7 +174,7 @@ func (p *Provider) signedGET(ctx context.Context, path string, values url.Values
 	_, _ = signature.Write([]byte(payload))
 	values.Set("signature", hex.EncodeToString(signature.Sum(nil)))
 
-	endpoint := strings.TrimRight(p.restBaseURL(), "/") + path + "?" + values.Encode()
+	endpoint := strings.TrimRight(p.signedRestBaseURL(), "/") + path + "?" + values.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err

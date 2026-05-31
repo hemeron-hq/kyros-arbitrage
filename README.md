@@ -121,6 +121,7 @@ curl -fsS https://kyros-arbitrage.fly.dev/healthz
 ```
 
 No configures secrets para la primera demo publica. Si se omiten `BINANCE_API_KEY`, `BINANCE_API_SECRET`, `KRAKEN_API_KEY` y `KRAKEN_API_SECRET`, Kyros usa terminos fallback visibles en la UI.
+El feed publico de Binance usa `data-api.binance.vision` y `data-stream.binance.vision` para evitar los bloqueos de geolocalizacion que suelen afectar a `api.binance.com` desde regiones cloud de Estados Unidos.
 
 ## Capturas de pantalla
 
