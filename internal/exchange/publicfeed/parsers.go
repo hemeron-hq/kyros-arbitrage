@@ -58,7 +58,11 @@ func okxSnapshot(data struct {
 	if err != nil {
 		return exchange.OrderBookSnapshot{}, false, err
 	}
-	out, err := snapshot(exchange.OKX, binding, bids, asks, receivedAt, unixMillisString(data.TS), 0, parseInt64Any(data.SeqID), transport, "books live")
+	msg := "books live"
+	if transport == exchange.TransportWebSocket {
+		msg = "books5 live"
+	}
+	out, err := snapshot(exchange.OKX, binding, bids, asks, receivedAt, unixMillisString(data.TS), 0, parseInt64Any(data.SeqID), transport, msg)
 	return out, err == nil, err
 }
 

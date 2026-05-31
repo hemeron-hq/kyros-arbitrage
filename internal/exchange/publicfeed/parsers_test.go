@@ -19,10 +19,10 @@ func TestNewExchangeWebSocketParsers(t *testing.T) {
 		ask      string
 	}{
 		{
-			name:     "okx",
+			name:     "okx_books5",
 			parser:   okxParser{},
 			binding:  testBinding(exchange.OKX, "BTC/USDT", "BTC-USDT"),
-			payload:  `{"arg":{"channel":"books","instId":"BTC-USDT"},"data":[{"bids":[["100","1","0","1"]],"asks":[["101","2","0","1"]],"ts":"1800000000000","seqId":123}]}`,
+			payload:  `{"arg":{"channel":"books5","instId":"BTC-USDT"},"data":[{"bids":[["100","1","0","1"]],"asks":[["101","2","0","1"]],"ts":"1800000000000","seqId":123}]}`,
 			exchange: exchange.OKX,
 			bid:      "100",
 			ask:      "101",

@@ -139,7 +139,7 @@ func NewOKX() *Provider {
 			payload, _ := json.Marshal(map[string]any{
 				"op": "subscribe",
 				"args": []map[string]string{{
-					"channel": "books",
+					"channel": "books5",
 					"instId":  binding.WebSocketSymbol,
 				}},
 			})
