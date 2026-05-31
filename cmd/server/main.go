@@ -19,7 +19,11 @@ func main() {
 	}
 
 	logger := logging.New(cfg.Environment)
-	httpServer := server.New(cfg)
+	httpServer, err := server.New(cfg)
+	if err != nil {
+		logger.Error().Err(err).Msg("create server")
+		os.Exit(1)
+	}
 
 	logger.Info().Str("addr", httpServer.Addr).Str("environment", string(cfg.Environment)).Msg("starting kyros arbitrage scaffold")
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

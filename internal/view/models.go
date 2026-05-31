@@ -31,6 +31,7 @@ type LiveDashboardView struct {
 	OpportunityRows []OpportunityRow
 	TermsRows       []TermsSourceRow
 	BalanceRows     []BalanceRow
+	History         HistoryView
 	LiveFeeds       int
 	StaleFeeds      int
 	BestNetPnl      string
@@ -39,6 +40,16 @@ type LiveDashboardView struct {
 	Executed        string
 	Rejected        string
 	LastUpdated     string
+}
+
+type HistoryView struct {
+	Path             string
+	Status           string
+	OpportunityCount string
+	ExecutionCount   string
+	TotalPnl         string
+	OpportunityRows  []HistoryOpportunityRow
+	ExecutionRows    []HistoryExecutionRow
 }
 
 type FeedRow struct {
@@ -70,6 +81,25 @@ type OpportunityRow struct {
 	ExpectedNet string
 	Decision    string
 	Reason      string
+}
+
+type HistoryOpportunityRow struct {
+	Observed    string
+	Route       string
+	Market      string
+	Size        string
+	ExpectedNet string
+	Decision    string
+	Reason      string
+}
+
+type HistoryExecutionRow struct {
+	Executed    string
+	Route       string
+	Market      string
+	Size        string
+	NetProfit   string
+	TermsSource string
 }
 
 type TermsSourceRow struct {

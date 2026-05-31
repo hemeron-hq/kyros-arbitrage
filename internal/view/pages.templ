@@ -16,7 +16,7 @@ templ Page(model PageModel) {
 		<body class="min-h-screen bg-background text-foreground antialiased">
 			<main
 				id="dashboard"
-				class="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 2xl:px-10"
+				class="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-3 px-3 py-3 sm:px-4 lg:px-5 2xl:px-6"
 				data-signals={ templ.JSONString(DashboardSignals{
 					Connected: model.Heartbeat.Connected,
 					ServerTime: model.Heartbeat.ServerTime,
@@ -27,8 +27,12 @@ templ Page(model PageModel) {
 				}) }
 				data-init="@get('/stream', {openWhenHidden: true})"
 			>
-				<header class="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-center md:justify-between">
-					<div class="space-y-2">
+				<header class="terminal-topbar flex flex-col gap-4 rounded-lg border border-border/80 px-4 py-3 md:flex-row md:items-center md:justify-between">
+					<div class="flex min-w-0 items-start gap-3">
+						<div class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-primary/35 bg-primary/15 text-primary shadow-[0_0_24px_color-mix(in_oklab,var(--primary)_22%,transparent)]">
+							<span class="size-3 rounded-[3px] bg-current"></span>
+						</div>
+						<div class="min-w-0 space-y-2">
 						<div class="flex flex-wrap items-center gap-2">
 							@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
 								Realtime feeds
@@ -44,13 +48,15 @@ templ Page(model PageModel) {
 							</p>
 						</div>
 					</div>
+					</div>
 					<div class="flex items-center gap-3">
-						<div class="text-right text-xs text-muted-foreground">
+						<div class="text-left text-xs text-muted-foreground md:text-right">
 							<div>Started</div>
 							<div class="font-mono text-foreground">{ model.StartedAt }</div>
 						</div>
 						@button.Button(button.Props{
 							Variant: button.VariantSecondary,
+							Class: "h-9 rounded-lg border border-border bg-foreground px-4 text-background shadow-[0_12px_28px_rgba(0,0,0,0.28)] hover:bg-foreground/90",
 							Attributes: templ.Attributes{
 								"data-on:click": "@get('/stream')",
 								"data-indicator:streaming": "",
@@ -64,11 +70,11 @@ templ Page(model PageModel) {
 
 				@MetricStrip(model.Live)
 
-				<section class="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+				<section class="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
 					<div class="min-w-0">
 						@LiveDashboard(model.Live)
 					</div>
-					<div class="min-w-0">
+					<div class="min-w-0 xl:sticky xl:top-3">
 						@HeartbeatPanel(model.Heartbeat)
 					</div>
 				</section>
@@ -88,21 +94,22 @@ templ Head(title string) {
 }
 
 templ MetricStrip(live LiveDashboardView) {
-	<section id="metric-strip" class="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+	<section id="metric-strip" class="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-6">
 		@MetricCard("Live feeds", strconv.Itoa(live.LiveFeeds), "Backend market streams.")
 		@MetricCard("Best net P&L", live.BestNetPnl, live.BestNetState)
 		@MetricCard("Session P&L", live.SessionPnl, live.Executed + " simulated fills")
+		@MetricCard("History P&L", live.History.TotalPnl, live.History.ExecutionCount + " stored trades")
 		@MetricCard("Rejected", live.Rejected, "Current decision pass.")
 		@MetricCard("Stale/error feeds", strconv.Itoa(live.StaleFeeds), "Fallback and reconnect state.")
 	</section>
 }
 
 templ MetricCard(label string, value string, detail string) {
-	@card.Card(card.Props{Class: "min-w-0"}) {
-		@card.Content() {
-			<div class="min-w-0 space-y-2 p-1">
-				<div class="text-sm text-muted-foreground">{ label }</div>
-				<div class="text-2xl font-semibold tracking-normal">{ value }</div>
+	@card.Card(card.Props{Class: "terminal-card min-w-0"}) {
+		@card.Content(card.ContentProps{Class: "p-4"}) {
+			<div class="min-w-0 space-y-1">
+				<div class="text-xs uppercase text-muted-foreground">{ label }</div>
+				<div class="font-mono text-xl font-semibold tracking-normal text-foreground">{ value }</div>
 				<div class="break-words text-xs text-muted-foreground">{ detail }</div>
 			</div>
 		}
@@ -110,8 +117,8 @@ templ MetricCard(label string, value string, detail string) {
 }
 
 templ HeartbeatPanel(heartbeat HeartbeatView) {
-	@card.Card(card.Props{ID: "heartbeat-panel", Class: "min-w-0 overflow-hidden"}) {
-		@card.Header() {
+	@card.Card(card.Props{ID: "heartbeat-panel", Class: "terminal-card min-w-0 overflow-hidden"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			<div class="flex items-start justify-between gap-3">
 				<div>
 					@card.Title() {
@@ -127,21 +134,21 @@ templ HeartbeatPanel(heartbeat HeartbeatView) {
 				}
 			</div>
 		}
-		@card.Content() {
-			<dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-				<div class="rounded-lg border border-border p-3">
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+				<div class="terminal-stat rounded-lg border border-border p-3">
 					<dt class="text-muted-foreground">Server time</dt>
 					<dd class="mt-1 break-words font-mono text-xs" data-text="$serverTime">{ heartbeat.ServerTime }</dd>
 				</div>
-				<div class="rounded-lg border border-border p-3">
+				<div class="terminal-stat rounded-lg border border-border p-3">
 					<dt class="text-muted-foreground">Heartbeats</dt>
 					<dd class="mt-1 font-mono text-lg font-semibold" data-text="$ticks">{ heartbeat.TicksLabel }</dd>
 				</div>
-				<div class="rounded-lg border border-border p-3">
+				<div class="terminal-stat rounded-lg border border-border p-3">
 					<dt class="text-muted-foreground">Uptime</dt>
 					<dd class="mt-1 font-mono text-xs">{ heartbeat.Uptime }</dd>
 				</div>
-				<div class="rounded-lg border border-border p-3">
+				<div class="terminal-stat rounded-lg border border-border p-3">
 					<dt class="text-muted-foreground">Transport</dt>
 					<dd class="mt-1 font-medium">SSE</dd>
 				</div>
@@ -151,10 +158,11 @@ templ HeartbeatPanel(heartbeat HeartbeatView) {
 }
 
 templ LiveDashboard(live LiveDashboardView) {
-	<div id="live-dashboard" class="grid min-w-0 gap-4">
+	<div id="live-dashboard" class="grid min-w-0 gap-3">
 		@FeedCard(live.FeedRows, live.LastUpdated)
 		@OpportunityCard(live.OpportunityRows)
-		<section class="grid min-w-0 gap-4 2xl:grid-cols-2">
+		@HistoryCard(live.History)
+		<section class="grid min-w-0 gap-3 2xl:grid-cols-2">
 			@TermsSourceCard(live.TermsRows)
 			@BalanceCard(live.BalanceRows)
 		</section>
@@ -162,8 +170,8 @@ templ LiveDashboard(live LiveDashboardView) {
 }
 
 templ FeedCard(rows []FeedRow, lastUpdated string) {
-	@card.Card(card.Props{Class: "min-w-0 overflow-hidden"}) {
-		@card.Header() {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 				<div>
 					@card.Title() {
@@ -176,8 +184,8 @@ templ FeedCard(rows []FeedRow, lastUpdated string) {
 				<span class="font-mono text-xs text-muted-foreground">{ lastUpdated }</span>
 			</div>
 		}
-		@card.Content() {
-			<div class="w-full max-w-full overflow-x-auto">
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[860px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
@@ -254,8 +262,8 @@ templ FeedCard(rows []FeedRow, lastUpdated string) {
 }
 
 templ OpportunityCard(rows []OpportunityRow) {
-	@card.Card(card.Props{Class: "min-w-0 overflow-hidden"}) {
-		@card.Header() {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			@card.Title() {
 				Decision engine
 			}
@@ -263,8 +271,8 @@ templ OpportunityCard(rows []OpportunityRow) {
 				Net profitability after fees, slippage, latency, and simulated wallet constraints.
 			}
 		}
-		@card.Content() {
-			<div class="w-full max-w-full overflow-x-auto">
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[1040px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
@@ -350,9 +358,180 @@ templ OpportunityCard(rows []OpportunityRow) {
 	}
 }
 
+templ HistoryCard(history HistoryView) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					@card.Title() {
+						Persistent history
+					}
+					@card.Description() {
+						Stored opportunities, simulated fills, and accumulated P&L.
+					}
+				</div>
+				<div class="text-left text-xs text-muted-foreground sm:text-right">
+					<div>{ history.Status }</div>
+					<div class="max-w-[420px] truncate font-mono">{ history.Path }</div>
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="grid gap-3">
+				<dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+					<div class="terminal-stat rounded-lg border border-border p-3">
+						<dt class="text-muted-foreground">Stored opportunities</dt>
+						<dd class="mt-1 font-mono text-lg font-semibold">{ history.OpportunityCount }</dd>
+					</div>
+					<div class="terminal-stat rounded-lg border border-border p-3">
+						<dt class="text-muted-foreground">Stored trades</dt>
+						<dd class="mt-1 font-mono text-lg font-semibold">{ history.ExecutionCount }</dd>
+					</div>
+					<div class="terminal-stat rounded-lg border border-border p-3">
+						<dt class="text-muted-foreground">Accumulated P&L</dt>
+						<dd class="mt-1 font-mono text-lg font-semibold">{ history.TotalPnl }</dd>
+					</div>
+				</dl>
+
+				<div class="grid gap-3 2xl:grid-cols-2">
+					<div class="min-w-0">
+						<div class="mb-2 text-sm font-medium">Recent simulated fills</div>
+						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+							@table.Table(table.Props{Class: "min-w-[760px] table-fixed"}) {
+								@table.Header() {
+									@table.Row() {
+										@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+											Time
+										}
+										@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+											Route
+										}
+										@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+											Market
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Size
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Net P&L
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Terms
+										}
+									}
+								}
+								@table.Body() {
+									if len(history.ExecutionRows) == 0 {
+										@table.Row() {
+											<td colspan="6" class="p-4 text-sm text-muted-foreground">
+												No simulated fills have been persisted yet.
+											</td>
+										}
+									}
+									for _, row := range history.ExecutionRows {
+										@table.Row() {
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Executed }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="block truncate font-medium">{ row.Route }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Size }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.NetProfit }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="text-xs text-muted-foreground">{ row.TermsSource }</span>
+											}
+										}
+									}
+								}
+							}
+						</div>
+					</div>
+
+					<div class="min-w-0">
+						<div class="mb-2 text-sm font-medium">Recent detected opportunities</div>
+						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
+							@table.Table(table.Props{Class: "min-w-[820px] table-fixed"}) {
+								@table.Header() {
+									@table.Row() {
+										@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+											Time
+										}
+										@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+											Route
+										}
+										@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+											Market
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Size
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Net P&L
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Decision
+										}
+										@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+											Reason
+										}
+									}
+								}
+								@table.Body() {
+									if len(history.OpportunityRows) == 0 {
+										@table.Row() {
+											<td colspan="7" class="p-4 text-sm text-muted-foreground">
+												No opportunities have been persisted yet.
+											</td>
+										}
+									}
+									for _, row := range history.OpportunityRows {
+										@table.Row() {
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Observed }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="block truncate font-medium">{ row.Route }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Size }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.ExpectedNet }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+													{ row.Decision }
+												}
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="block truncate font-mono text-xs">{ row.Reason }</span>
+											}
+										}
+									}
+								}
+							}
+						</div>
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
 templ TermsSourceCard(rows []TermsSourceRow) {
-	@card.Card(card.Props{Class: "min-w-0 overflow-hidden"}) {
-		@card.Header() {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			@card.Title() {
 				Terms sources
 			}
@@ -360,8 +539,8 @@ templ TermsSourceCard(rows []TermsSourceRow) {
 				Authenticated trading terms fall back per exchange market when credentials are absent or rejected.
 			}
 		}
-		@card.Content() {
-			<div class="w-full max-w-full overflow-x-auto">
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[720px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {
@@ -418,8 +597,8 @@ templ TermsSourceCard(rows []TermsSourceRow) {
 }
 
 templ BalanceCard(rows []BalanceRow) {
-	@card.Card(card.Props{Class: "min-w-0 overflow-hidden"}) {
-		@card.Header() {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
 			@card.Title() {
 				Paper wallets
 			}
@@ -427,8 +606,8 @@ templ BalanceCard(rows []BalanceRow) {
 				Simulated balances used to bound autonomous decisions.
 			}
 		}
-		@card.Content() {
-			<div class="w-full max-w-full overflow-x-auto">
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border border-border/70" tabindex="0">
 				@table.Table(table.Props{Class: "min-w-[520px] table-fixed"}) {
 					@table.Header() {
 						@table.Row() {

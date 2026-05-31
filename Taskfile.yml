@@ -1,6 +1,11 @@
 version: "3"
 
 tasks:
+  sqlc:
+    desc: Generate Go code from SQL queries
+    cmds:
+      - sqlc generate -f sql/sqlc.yaml
+
   generate:
     desc: Generate Go code from templ templates
     cmds:
@@ -36,8 +41,9 @@ tasks:
         tailwindcss -i ./assets/css/input.css -o ./assets/css/output.css --watch
 
   check:
-    desc: Generate templates, build CSS, and compile Go packages
+    desc: Generate SQL/templates, build CSS, and compile Go packages
     cmds:
+      - task: sqlc
       - task: generate
       - task: css
       - go test ./...
@@ -51,3 +57,13 @@ tasks:
     desc: Start the SSR server
     cmds:
       - go run ./cmd/server
+
+  docker-build:
+    desc: Build the production Docker image
+    cmds:
+      - docker build -t kyros-arbitrage .
+
+  docker-run:
+    desc: Run the production Docker image locally
+    cmds:
+      - docker run --rm -p 8090:8090 -v database:/var/lib/app -e ENV=production -e DATABASE_URL=file:/var/lib/app/app.db kyros-arbitrage

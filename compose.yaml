@@ -1,0 +1,18 @@
+services:
+  kyros-arbitrage:
+    build: .
+    ports:
+      - "8090:8090"
+    environment:
+      ENV: production
+      PORT: "8090"
+      DATABASE_URL: file:/var/lib/app/app.db
+      BINANCE_API_KEY: ${BINANCE_API_KEY:-}
+      BINANCE_API_SECRET: ${BINANCE_API_SECRET:-}
+      KRAKEN_API_KEY: ${KRAKEN_API_KEY:-}
+      KRAKEN_API_SECRET: ${KRAKEN_API_SECRET:-}
+    volumes:
+      - database:/var/lib/app
+
+volumes:
+  database:

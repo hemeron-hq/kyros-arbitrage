@@ -1,6 +1,8 @@
 tmp/
 *.out
 /kyros-arbitrage
+/app.db
+/app.db-*
 assets/css/sources.generated.css
 .env
 

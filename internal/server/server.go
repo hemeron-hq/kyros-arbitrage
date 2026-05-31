@@ -14,8 +14,10 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/binance"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange/kraken"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/history"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/market"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/platform/config"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/platform/database"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/portfolio/paper"
 	"github.com/hemeron-hq/kyros-arbitrage/internal/terms"
@@ -39,6 +41,8 @@ type Server struct {
 	termsStore           *terms.Store
 	ledger               portfolio.Store
 	decisionEngine       *arbitrage.Engine
+	database             *database.Database
+	historyStore         *history.Store
 	disableMarketService bool
 }
 
@@ -56,24 +60,32 @@ func WithMarketServiceDisabled() Option {
 	}
 }
 
-func New(cfg config.Config, opts ...Option) *http.Server {
+func New(cfg config.Config, opts ...Option) (*http.Server, error) {
 	marketConfig := market.DefaultServiceConfig()
 	now := time.Now()
+	ctx, cancel := context.WithCancel(context.Background())
+	appDatabase, err := database.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	historyStore := history.New(appDatabase)
 	termsStore := terms.NewStore(now)
 	ledger := paper.NewLedger()
 	app := &Server{
-		cfg:         cfg,
-		startedAt:   now,
-		marketStore: market.NewStore(marketConfig.StaleAfter),
-		termsStore:  termsStore,
-		ledger:      ledger,
+		cfg:          cfg,
+		startedAt:    now,
+		marketStore:  market.NewStore(marketConfig.StaleAfter),
+		termsStore:   termsStore,
+		ledger:       ledger,
+		database:     appDatabase,
+		historyStore: historyStore,
 	}
 	app.decisionEngine = arbitrage.NewEngine(app.termsStore, app.ledger)
 	for _, opt := range opts {
 		opt(app)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	binanceProvider := binance.New(binance.WithCredentials(cfg.BinanceAPIKey, cfg.BinanceAPISecret))
 	krakenProvider := kraken.New(kraken.WithCredentials(cfg.KrakenAPIKey, cfg.KrakenAPISecret))
 	termsService := terms.NewService(
@@ -105,9 +117,12 @@ func New(cfg config.Config, opts ...Option) *http.Server {
 		Handler:           app.routes(),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
-	httpServer.RegisterOnShutdown(cancel)
+	httpServer.RegisterOnShutdown(func() {
+		cancel()
+		_ = appDatabase.Close()
+	})
 
-	return httpServer
+	return httpServer, nil
 }
 
 func (s *Server) runDecisionLoop(ctx context.Context) {
@@ -129,7 +144,8 @@ func (s *Server) runDecisionLoop(ctx context.Context) {
 			if !dirty {
 				continue
 			}
-			s.decisionEngine.Evaluate(s.marketStore.Snapshot(), now)
+			snapshot := s.decisionEngine.Evaluate(s.marketStore.Snapshot(), now)
+			_ = s.historyStore.RecordSnapshot(ctx, snapshot)
 			dirty = false
 		}
 	}
@@ -140,6 +156,7 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /healthz", s.health)
+	mux.HandleFunc("GET /api/history", s.historyAPI)
 	mux.HandleFunc("GET /stream", s.stream)
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", s.assetHandler()))
 
@@ -150,7 +167,7 @@ func (s *Server) routes() http.Handler {
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := view.Page(s.pageModel()).Render(r.Context(), w); err != nil {
+	if err := view.Page(s.pageModel(r.Context())).Render(r.Context(), w); err != nil {
 		http.Error(w, "render page", http.StatusInternalServerError)
 	}
 }
@@ -179,6 +196,16 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 		Errors:  errors,
 		Markets: len(exchange.DefaultBindings()),
 	})
+}
+
+func (s *Server) historyAPI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	report, err := s.historyStore.Report(r.Context(), 25)
+	if err != nil {
+		http.Error(w, "load history", http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(report)
 }
 
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +266,7 @@ func (s *Server) assetHandler() http.Handler {
 
 func (s *Server) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks int, now time.Time) bool {
 	heartbeat := s.heartbeatView(ticks, now)
-	live := s.liveDashboardView(now)
+	live := s.liveDashboardView(sse.Context(), now)
 	signals := view.DashboardSignals{
 		Connected:  heartbeat.Connected,
 		ServerTime: heartbeat.ServerTime,
@@ -265,12 +292,12 @@ func (s *Server) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks in
 	return true
 }
 
-func (s *Server) pageModel() view.PageModel {
+func (s *Server) pageModel(ctx context.Context) view.PageModel {
 	return view.PageModel{
 		Title:     "Kyros Arbitrage",
 		StartedAt: displayTimestamp(s.startedAt),
 		Heartbeat: s.heartbeatView(0, time.Now()),
-		Live:      s.liveDashboardView(time.Now()),
+		Live:      s.liveDashboardView(ctx, time.Now()),
 	}
 }
 
@@ -286,7 +313,7 @@ func (s *Server) heartbeatView(ticks int, now time.Time) view.HeartbeatView {
 	}
 }
 
-func (s *Server) liveDashboardView(now time.Time) view.LiveDashboardView {
+func (s *Server) liveDashboardView(ctx context.Context, now time.Time) view.LiveDashboardView {
 	snapshots := s.marketStore.Snapshot()
 	projection := market.Project(snapshots, now)
 	rows := make([]view.FeedRow, 0, len(projection.Feeds))
@@ -359,12 +386,14 @@ func (s *Server) liveDashboardView(now time.Time) view.LiveDashboardView {
 		bestNet = displaySignedQuote(decisionSnapshot.SessionBestNet.ExpectedNetProfit)
 		bestState = bestNetState(decisionSnapshot.SessionBestNet)
 	}
+	historyView := s.historyView(ctx)
 
 	return view.LiveDashboardView{
 		FeedRows:        rows,
 		OpportunityRows: opportunities,
 		TermsRows:       termsRows,
 		BalanceRows:     balanceRows,
+		History:         historyView,
 		LiveFeeds:       liveFeeds,
 		StaleFeeds:      staleFeeds,
 		BestNetPnl:      bestNet,
@@ -373,6 +402,51 @@ func (s *Server) liveDashboardView(now time.Time) view.LiveDashboardView {
 		Executed:        strconv.Itoa(decisionSnapshot.Executed),
 		Rejected:        strconv.Itoa(decisionSnapshot.Rejected),
 		LastUpdated:     displayTimestamp(decisionSnapshot.LastUpdated),
+	}
+}
+
+func (s *Server) historyView(ctx context.Context) view.HistoryView {
+	reportCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	report, err := s.historyStore.Report(reportCtx, 8)
+	if err != nil {
+		return view.HistoryView{
+			Path:   s.database.Path(),
+			Status: "history unavailable",
+		}
+	}
+	opportunities := make([]view.HistoryOpportunityRow, 0, len(report.Opportunities))
+	for _, row := range report.Opportunities {
+		opportunities = append(opportunities, view.HistoryOpportunityRow{
+			Observed:    displayHistoryTimestamp(row.ObservedAt),
+			Route:       displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Market:      displayHistoryMarket(row.Market),
+			Size:        displayDecimalAsBase(row.BaseSize),
+			ExpectedNet: displaySignedDecimalAsQuote(row.ExpectedNetProfit),
+			Decision:    row.Decision,
+			Reason:      row.ReasonCode,
+		})
+	}
+	executions := make([]view.HistoryExecutionRow, 0, len(report.Executions))
+	for _, row := range report.Executions {
+		executions = append(executions, view.HistoryExecutionRow{
+			Executed:    displayHistoryTimestamp(row.ExecutedAt),
+			Route:       displayHistoryRoute(row.BuyExchange, row.SellExchange),
+			Market:      displayHistoryMarket(row.Market),
+			Size:        displayDecimalAsBase(row.BaseSize),
+			NetProfit:   displaySignedDecimalAsQuote(row.NetProfit),
+			TermsSource: row.TermsSource,
+		})
+	}
+	return view.HistoryView{
+		Path:             report.Summary.Path,
+		Status:           "persisted",
+		OpportunityCount: strconv.FormatInt(report.Summary.Opportunities, 10),
+		ExecutionCount:   strconv.FormatInt(report.Summary.Executions, 10),
+		TotalPnl:         displaySignedDecimalAsQuote(report.Summary.TotalPNL),
+		OpportunityRows:  opportunities,
+		ExecutionRows:    executions,
 	}
 }
 
@@ -477,6 +551,30 @@ func displayBase(value decimal.Decimal) string {
 	return trimTrailingZeros(fmt.Sprintf("%.8f", value))
 }
 
+func displayDecimalAsBase(value string) string {
+	parsed, ok := parseDecimal(value)
+	if !ok {
+		return "-"
+	}
+	return displayBase(parsed)
+}
+
+func displayDecimalAsQuote(value string) string {
+	parsed, ok := parseDecimal(value)
+	if !ok {
+		return "-"
+	}
+	return displayQuote(parsed)
+}
+
+func displaySignedDecimalAsQuote(value string) string {
+	parsed, ok := parseDecimal(value)
+	if !ok {
+		return "-"
+	}
+	return displaySignedQuote(parsed)
+}
+
 func displayAssetAmount(asset string, value decimal.Decimal) string {
 	switch asset {
 	case "BTC":
@@ -524,11 +622,36 @@ func displayRoute(buyExchange exchange.ID, sellExchange exchange.ID) string {
 	return titleCase(string(buyExchange)) + " -> " + titleCase(string(sellExchange))
 }
 
+func displayHistoryRoute(buyExchange string, sellExchange string) string {
+	if buyExchange == "" || sellExchange == "" {
+		return "-"
+	}
+	return titleCase(buyExchange) + " -> " + titleCase(sellExchange)
+}
+
 func displayMarket(market exchange.Market) string {
 	if market.Base == "" || market.Quote == "" {
 		return "BTC/USDT"
 	}
 	return market.ID()
+}
+
+func displayHistoryMarket(market string) string {
+	if market == "" {
+		return "-"
+	}
+	return market
+}
+
+func displayHistoryTimestamp(value string) string {
+	if value == "" {
+		return "-"
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return value
+	}
+	return displayTimestamp(parsed)
 }
 
 func displayFresh(fresh bool) string {

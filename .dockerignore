@@ -1,0 +1,6 @@
+.git
+.env
+/app.db
+/app.db-*
+tmp/
+*.log

@@ -8,12 +8,14 @@ Go SSR arbitrage dashboard with live public market feeds for the Bitcoin arbitra
 - WebSocket-first ingestion with polling fallback and stale-feed tracking.
 - Backend-owned market state; the UI only renders projections from Go services.
 - Net profitability after trading fees, book-depth slippage, latency penalty, and paper wallet limits.
+- SQLite-backed persistent history for detected opportunities, simulated fills, and accumulated P&L.
 - Per-exchange authenticated trading terms when read-only keys are present, with per-exchange-market fallback when keys are absent or rejected.
 - Autonomous paper execution only. There is no real order placement or real withdrawal execution.
 
 ## Requirements
 
 - Go 1.26.1
+- `sqlc`
 - `templ`
 - `task`
 - Tailwind CSS standalone CLI
@@ -21,6 +23,7 @@ Go SSR arbitrage dashboard with live public market feeds for the Bitcoin arbitra
 ## Commands
 
 ```bash
+task sqlc
 task generate
 task css
 task check
@@ -37,6 +40,7 @@ The only behavior-changing runtime configuration is:
 ```bash
 ENV=development
 PORT=8090
+DATABASE_URL=file:./app.db
 BINANCE_API_KEY=
 BINANCE_API_SECRET=
 KRAKEN_API_KEY=
@@ -56,6 +60,7 @@ task dev
 - `/` renders the SSR dashboard with feed status, net opportunities, paper wallets, terms-source health, and session P&L.
 - `/stream` opens a Datastar SSE stream with coalesced dashboard patches.
 - `/healthz` returns process and feed-health status.
+- `/api/history` returns persisted opportunity, simulated execution, and P&L history.
 - `/assets/` serves CSS and the self-hosted Datastar client.
 
 ## Package Layout
@@ -66,11 +71,14 @@ task dev
 - `internal/terms` owns trading terms aggregation, fallback profiles, freshness, source health, and background refresh orchestration.
 - `internal/market` owns market-data store, projections, and service lifecycle over exchange interfaces.
 - `internal/arbitrage` owns direct arbitrage depth walking, net profitability, latency penalties, ranking, and autonomous decisions.
+- `internal/history` owns persistent opportunity and execution history recording/reporting.
 - `internal/orders` is reserved for future order placement, cancellation, fills, and paper/real gateways.
 - `internal/portfolio` defines portfolio contracts; `internal/portfolio/paper` owns simulated exchange balances, fills, and session P&L.
 - `internal/platform/config` owns strongly typed environment configuration.
+- `internal/platform/database` owns application database opening, goose migration execution, and generated query access.
 - `internal/server` owns HTTP routing, handlers, static assets, and Datastar SSE projection wiring.
 - `internal/view` owns server-rendered templ views and view models.
+- `sql/` owns migrations, queries, and the sqlc config. `gen/db` contains sqlc-generated Go code and should not be edited by hand.
 
 ## Market Data Defaults
 
@@ -83,3 +91,28 @@ The scoring hot path reads in-memory snapshots only. REST calls for authenticate
 Kyros models one wallet per exchange, with independent balances per asset. A direct cross-exchange paper trade buys BTC on the cheaper exchange using that exchange's USDT wallet and sells BTC on the richer exchange using that other exchange's BTC wallet. The engine never assumes instant transfers between exchanges. If one side lacks balance, the route is either partially sized down or rejected.
 
 The current `internal/portfolio/paper` implementation is in-memory and seeded from authenticated balances when available, otherwise from visible fallback balances. Future real account implementations should satisfy the `internal/portfolio.Store` contract and live beside `paper` rather than replacing the arbitrage logic.
+
+## Persistent History
+
+Kyros writes each decision pass to the application SQLite database through sqlc-generated queries. The default local database URL is `file:./app.db`; override it with `DATABASE_URL`. Relative file URLs are resolved from the process working directory, so the repo Taskfile commands create `/app.db` at the repository root, not under `cmd/server`. The dashboard shows recent detected opportunities, simulated fills, stored counts, and accumulated historical P&L, while `/api/history` exposes the same data as JSON for demos and diagnostics.
+
+Database migrations live in `sql/migrations`, use goose annotations, and are applied by `internal/platform/database` on startup. Runtime commands should be started from the repository root so the migration directory is available at `sql/migrations`; the Docker image copies that directory into `/app/sql/migrations`. Query code is generated from `sql/queries` into `gen/db`.
+
+The application database is intentionally separate from the in-memory paper wallet. Restarting the app preserves persisted history and accumulated P&L reports, while the paper wallet still starts from authenticated or fallback balances.
+
+## Docker and Deployment
+
+Build and run the production image locally:
+
+```bash
+task docker-build
+task docker-run
+```
+
+The image listens on `PORT` and stores the application database at `/var/lib/app/app.db` by default. Mount `/var/lib/app` as a persistent volume in production:
+
+```bash
+docker run --rm -p 8090:8090 -v database:/var/lib/app -e ENV=production kyros-arbitrage
+```
+
+`compose.yaml` runs the same container locally with a named volume mounted at `/var/lib/app`.
