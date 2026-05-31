@@ -67,7 +67,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
 	var out bytes.Buffer
 	if err := Page(h.model(r.Context(), 0, time.Now(), pageOptions(r))).Render(r.Context(), &out); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "render page", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

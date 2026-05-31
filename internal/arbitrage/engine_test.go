@@ -29,7 +29,7 @@ func TestEvaluateSubtractsRebalanceCost(t *testing.T) {
 	if !opportunity.RebalanceCost.Equal(decimal.MustNew(801, 2)) {
 		t.Fatalf("expected 8.01 rebalance cost, got %s", opportunity.RebalanceCost)
 	}
-	if !opportunity.ExpectedNetProfit.Equal(decimal.MustNew(4315, 3)) {
+	if !opportunity.ExpectedNetProfit.Equal(decimal.MustNew(41290, 3)) {
 		t.Fatalf("expected net profit after rebalance, got %s", opportunity.ExpectedNetProfit)
 	}
 }

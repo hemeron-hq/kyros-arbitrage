@@ -6,4 +6,6 @@ tmp/
 assets/css/sources.generated.css
 .env
 
-/docs
+/docs/*
+!/docs/screenshots/
+!/docs/screenshots/*.png
