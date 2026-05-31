@@ -25,6 +25,7 @@ const (
 )
 
 const (
+	ReasonEligible            = "ELIGIBLE"
 	ReasonExecuted            = "EXECUTED"
 	ReasonWaitingLatencyModel = "WAITING_LATENCY_MODEL"
 	ReasonWaitingMakerConfirm = "WAITING_MAKER_CONFIRM"

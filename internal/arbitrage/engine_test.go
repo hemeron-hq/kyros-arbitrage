@@ -83,6 +83,9 @@ func TestMakerRouteRequiresConfirmationTick(t *testing.T) {
 	if second.Opportunities[0].Decision != DecisionExecute {
 		t.Fatalf("expected confirmed maker route to execute, got %s/%s", second.Opportunities[0].Decision, second.Opportunities[0].ReasonCode)
 	}
+	if second.Opportunities[0].ReasonCode != ReasonExecuted {
+		t.Fatalf("expected confirmed maker route to be applied, got %s", second.Opportunities[0].ReasonCode)
+	}
 }
 
 func TestEvaluateKeepsUSDAndUSDTMarketsSeparate(t *testing.T) {
@@ -113,6 +116,53 @@ func TestEvaluateKeepsUSDAndUSDTMarketsSeparate(t *testing.T) {
 				t.Fatalf("USD route crossed into USDT exchange: %+v", opportunity)
 			}
 		}
+	}
+}
+
+func TestEvaluateAppliesOnlyTopRankedRoute(t *testing.T) {
+	now := time.Now()
+	ledger := paper.NewLedger()
+	engine := NewEngine(terms.NewStore(now), ledger, nil)
+	market := exchange.Market{Base: "BTC", Quote: "USDT"}
+	snapshots := []exchange.OrderBookSnapshot{
+		testBook(exchange.Binance, market, now, "99", "100", 1),
+		testBook(exchange.Kraken, market, now, "150", "151", 2),
+		testBook(exchange.OKX, market, now, "145", "146", 3),
+	}
+
+	engine.Evaluate(snapshots, now)
+	result := engine.Evaluate(snapshots, now.Add(time.Millisecond))
+
+	if ledger.Stats().Executed != 1 {
+		t.Fatalf("expected 1 ledger apply, got %d", ledger.Stats().Executed)
+	}
+	if len(result.Opportunities) == 0 {
+		t.Fatal("expected opportunities")
+	}
+	if result.Opportunities[0].ReasonCode != ReasonExecuted {
+		t.Fatalf("expected rank 1 to be executed, got %s", result.Opportunities[0].ReasonCode)
+	}
+
+	executed := 0
+	eligible := 0
+	for _, opportunity := range result.Opportunities {
+		switch opportunity.ReasonCode {
+		case ReasonExecuted:
+			executed++
+		case ReasonEligible:
+			eligible++
+		}
+	}
+	if executed != 1 {
+		t.Fatalf("expected 1 executed opportunity, got %d", executed)
+	}
+	if eligible == 0 {
+		t.Fatal("expected at least one eligible but unapplied opportunity")
+	}
+
+	fallbackUSDT := terms.FallbackBalances()["USDT"]
+	if ledger.Balance(exchange.Binance, "USDT").Equal(fallbackUSDT) {
+		t.Fatal("expected buy exchange quote balance to change after apply")
 	}
 }
 

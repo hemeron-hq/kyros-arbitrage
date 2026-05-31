@@ -304,7 +304,7 @@ func (e *Engine) evaluatePairStyle(buy exchange.OrderBookSnapshot, sell exchange
 	}
 
 	opportunity.Decision = DecisionExecute
-	opportunity.ReasonCode = ReasonExecuted
+	opportunity.ReasonCode = ReasonEligible
 	if _, seen := e.executedIDs[opportunity.ID]; seen {
 		opportunity.Decision = DecisionWait
 		opportunity.ReasonCode = ReasonWaitingNewBook
@@ -776,6 +776,7 @@ func (e *Engine) executeBest(opportunity *Opportunity, now time.Time) {
 		opportunity.ReasonCode = ReasonLedgerApplyFailed
 		return
 	}
+	opportunity.ReasonCode = ReasonExecuted
 	e.executedIDs[opportunity.ID] = struct{}{}
 	delete(e.pendingMaker, makerConfirmationKey(*opportunity))
 }

@@ -11,6 +11,29 @@ import (
 	"github.com/hemeron-hq/kyros-arbitrage/internal/exchange"
 )
 
+func TestHistoryRecorderIgnoresEligibleRoutes(t *testing.T) {
+	recorder := newHistoryRecorder(newFakeHistoryStore())
+
+	recorder.observe(arbitrage.Snapshot{
+		Opportunities: []arbitrage.Opportunity{
+			testRecorderOpportunity("applied", 1, arbitrage.DecisionExecute, arbitrage.ReasonExecuted),
+			testRecorderOpportunity("eligible", 2, arbitrage.DecisionExecute, arbitrage.ReasonEligible),
+		},
+		LastUpdated: time.Now(),
+	})
+
+	executions, _ := recorder.drain()
+	if len(executions) != 1 {
+		t.Fatalf("expected 1 execution batch, got %d", len(executions))
+	}
+	if len(executions[0].opportunities) != 1 {
+		t.Fatalf("expected 1 persisted execution, got %d", len(executions[0].opportunities))
+	}
+	if executions[0].opportunities[0].ID != "applied" {
+		t.Fatalf("expected applied route only, got %s", executions[0].opportunities[0].ID)
+	}
+}
+
 func TestHistoryRecorderPersistsExecutionsImmediately(t *testing.T) {
 	store := newFakeHistoryStore()
 	recorder := newHistoryRecorder(store)
