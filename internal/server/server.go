@@ -252,6 +252,9 @@ func (s *Server) patchDashboard(sse *datastar.ServerSentEventGenerator, ticks in
 	if err := sse.MarshalAndPatchSignals(signals); err != nil {
 		return false
 	}
+	if err := sse.PatchElementTempl(view.MetricStrip(live)); err != nil {
+		return false
+	}
 	if err := sse.PatchElementTempl(view.HeartbeatPanel(heartbeat)); err != nil {
 		return false
 	}
@@ -352,6 +355,10 @@ func (s *Server) liveDashboardView(now time.Time) view.LiveDashboardView {
 		})
 	}
 	bestNet, bestState := bestOpportunity(opportunities)
+	if decisionSnapshot.HasSessionBestNet {
+		bestNet = displaySignedQuote(decisionSnapshot.SessionBestNet.ExpectedNetProfit)
+		bestState = bestNetState(decisionSnapshot.SessionBestNet)
+	}
 
 	return view.LiveDashboardView{
 		FeedRows:        rows,
@@ -536,4 +543,12 @@ func bestOpportunity(rows []view.OpportunityRow) (string, string) {
 		return "-", "waiting for live books"
 	}
 	return rows[0].ExpectedNet, rows[0].Reason
+}
+
+func bestNetState(opportunity arbitrage.Opportunity) string {
+	route := displayRoute(opportunity.BuyExchange, opportunity.SellExchange)
+	if route == "-" {
+		return "session best: " + opportunity.ReasonCode
+	}
+	return "session best: " + route + " / " + opportunity.ReasonCode
 }

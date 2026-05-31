@@ -60,11 +60,13 @@ type Opportunity struct {
 }
 
 type Snapshot struct {
-	Opportunities []Opportunity
-	Balances      []portfolio.BalanceRow
-	TermsHealth   []terms.Health
-	SessionPNL    decimal.Decimal
-	Executed      int
-	Rejected      int
-	LastUpdated   time.Time
+	Opportunities     []Opportunity
+	Balances          []portfolio.BalanceRow
+	TermsHealth       []terms.Health
+	SessionPNL        decimal.Decimal
+	SessionBestNet    Opportunity
+	HasSessionBestNet bool
+	Executed          int
+	Rejected          int
+	LastUpdated       time.Time
 }

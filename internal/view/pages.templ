@@ -62,13 +62,7 @@ templ Page(model PageModel) {
 					</div>
 				</header>
 
-				<section class="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-					@MetricCard("Live feeds", strconv.Itoa(model.Live.LiveFeeds), "Backend market streams.")
-					@MetricCard("Best net P&L", model.Live.BestNetPnl, model.Live.BestNetState)
-					@MetricCard("Session P&L", model.Live.SessionPnl, model.Live.Executed + " simulated fills")
-					@MetricCard("Rejected", model.Live.Rejected, "Current decision pass.")
-					@MetricCard("Stale/error feeds", strconv.Itoa(model.Live.StaleFeeds), "Fallback and reconnect state.")
-				</section>
+				@MetricStrip(model.Live)
 
 				<section class="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
 					<div class="min-w-0">
@@ -91,6 +85,16 @@ templ Head(title string) {
 		<link rel="stylesheet" href="/assets/css/output.css"/>
 		<script type="module" src="/assets/js/datastar.js"></script>
 	</head>
+}
+
+templ MetricStrip(live LiveDashboardView) {
+	<section id="metric-strip" class="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+		@MetricCard("Live feeds", strconv.Itoa(live.LiveFeeds), "Backend market streams.")
+		@MetricCard("Best net P&L", live.BestNetPnl, live.BestNetState)
+		@MetricCard("Session P&L", live.SessionPnl, live.Executed + " simulated fills")
+		@MetricCard("Rejected", live.Rejected, "Current decision pass.")
+		@MetricCard("Stale/error feeds", strconv.Itoa(live.StaleFeeds), "Fallback and reconnect state.")
+	</section>
 }
 
 templ MetricCard(label string, value string, detail string) {
