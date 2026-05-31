@@ -1,0 +1,39 @@
+package dashboard
+
+import (
+	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/exchanges"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/live"
+	riskui "github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/risk"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/dashboard/speed"
+	"github.com/hemeron-hq/kyros-arbitrage/internal/ui/shared"
+)
+
+type Signals struct {
+	Connected  bool   `json:"connected"`
+	ServerTime string `json:"serverTime"`
+	Ticks      int    `json:"ticks"`
+	Streaming  bool   `json:"streaming"`
+	LiveFeeds  int    `json:"liveFeeds"`
+	StaleFeeds int    `json:"staleFeeds"`
+}
+
+type Model struct {
+	Title     string
+	StartedAt string
+	Heartbeat HeartbeatView
+	Metrics   shared.Metrics
+	Live      live.Model
+	Speed     speed.Model
+	Risk      riskui.Model
+	Exchanges exchanges.Model
+}
+
+type HeartbeatView struct {
+	Connected   bool
+	StatusLabel string
+	StatusClass string
+	ServerTime  string
+	Ticks       int
+	TicksLabel  string
+	Uptime      string
+}

@@ -1,0 +1,53 @@
+package dashboard
+
+import (
+	"github.com/templui/templui/components/badge"
+	"github.com/templui/templui/components/card"
+	"github.com/templui/templui/components/icon"
+)
+
+templ HeartbeatPanel(heartbeat HeartbeatView) {
+	@card.Card(card.Props{ID: "heartbeat-panel", Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex items-start justify-between gap-3">
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.Server(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
+					@card.Title() {
+						System heartbeat
+					}
+					@card.Description() {
+						Server stream and process uptime.
+					}
+					</div>
+				</div>
+				@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Class: "terminal-badge flex items-center gap-2"}) {
+					<span class={ "size-2 rounded-full " + heartbeat.StatusClass }></span>
+					<span>{ heartbeat.StatusLabel }</span>
+				}
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+				<div class="terminal-stat rounded-lg border-0 p-3">
+					<dt class="text-muted-foreground">Server time</dt>
+					<dd class="mt-1 break-words font-mono text-xs" data-text="$serverTime">{ heartbeat.ServerTime }</dd>
+				</div>
+				<div class="terminal-stat rounded-lg border-0 p-3">
+					<dt class="text-muted-foreground">Heartbeats</dt>
+					<dd class="mt-1 font-mono text-lg font-semibold" data-text="$ticks">{ heartbeat.TicksLabel }</dd>
+				</div>
+				<div class="terminal-stat rounded-lg border-0 p-3">
+					<dt class="text-muted-foreground">Uptime</dt>
+					<dd class="mt-1 font-mono text-xs">{ heartbeat.Uptime }</dd>
+				</div>
+				<div class="terminal-stat rounded-lg border-0 p-3">
+					<dt class="text-muted-foreground">Transport</dt>
+					<dd class="mt-1 font-medium">SSE</dd>
+				</div>
+			</dl>
+		}
+	}
+}

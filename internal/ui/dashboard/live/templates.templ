@@ -1,0 +1,531 @@
+package live
+
+import (
+	"github.com/templui/templui/components/badge"
+	"github.com/templui/templui/components/card"
+	"github.com/templui/templui/components/icon"
+	"github.com/templui/templui/components/table"
+)
+
+templ Dashboard(live Model) {
+	<div id="live-dashboard" class="grid min-w-0 gap-3">
+		@FeedCard(live.FeedRows, live.LastUpdated)
+		@OpportunityCard(live.OpportunityRows)
+		@HistoryCard(live.History)
+		<section class="grid min-w-0 gap-3 2xl:grid-cols-2">
+			@TermsSourceCard(live.TermsRows)
+			@BalanceCard(live.BalanceRows)
+		</section>
+	</div>
+}
+
+templ FeedCard(rows []FeedRow, lastUpdated string) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.Radio(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
+					@card.Title() {
+						Exchange feeds
+					}
+					@card.Description() {
+						Top levels from separate public BTC/USDT and BTC/USD books.
+					}
+					</div>
+				</div>
+				<span class="font-mono text-xs text-muted-foreground">{ lastUpdated }</span>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[860px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Bid
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Ask
+							}
+							@table.Head(table.HeadProps{Class: "w-[80px]"}) {
+								Levels
+							}
+							@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+								Age
+							}
+							@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+								Latency
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Transport
+							}
+						}
+					}
+					@table.Body() {
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<div class="flex min-w-0 items-center gap-2">
+										<span class={ "size-2 rounded-full " + row.StatusClass }></span>
+										<div class="min-w-0">
+											<div class="truncate font-medium">{ row.Exchange }</div>
+											<div class="truncate text-xs text-muted-foreground">{ row.Status }</div>
+										</div>
+									</div>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<div class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.Bid }</div>
+									<div class="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">{ row.BidSize }</div>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<div class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.Ask }</div>
+									<div class="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">{ row.AskSize }</div>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Levels }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Age }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Latency }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Transport }
+									}
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ OpportunityCard(rows []OpportunityRow) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.TrendingUp(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
+			@card.Title() {
+				Decision engine
+			}
+			@card.Description() {
+				Net profitability after fees, slippage, latency, and wallet constraints.
+			}
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[1040px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[170px]"}) {
+								Route
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Size
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Gross
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Fees
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Slippage
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Latency
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Rebalance
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Net P&L
+							}
+							@table.Head(table.HeadProps{Class: "w-[130px]"}) {
+								Decision
+							}
+							@table.Head(table.HeadProps{Class: "w-[190px]"}) {
+								Reason
+							}
+						}
+					}
+					@table.Body() {
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="block truncate font-medium">{ row.Route }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Size }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.GrossPnl }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Fees }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Slippage }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Latency }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Rebalance }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.ExpectedNet }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Decision }
+									}
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="block truncate font-mono text-xs">{ row.Reason }</span>
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ HistoryCard(history HistoryView) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div class="flex min-w-0 items-start gap-2">
+					<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+						@icon.Database(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
+					@card.Title() {
+						Persistent history
+					}
+					@card.Description() {
+						Stored opportunities, fills, and accumulated P&L.
+					}
+					</div>
+				</div>
+				<div class="text-left text-xs text-muted-foreground sm:text-right">
+					<div>{ history.Status }</div>
+					<div class="max-w-[420px] truncate font-mono">{ history.Path }</div>
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="grid gap-3">
+				<dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+					<div class="terminal-stat rounded-lg border-0 p-3">
+						<dt class="text-muted-foreground">Stored opportunities</dt>
+						<dd class="mt-1 font-mono text-lg font-semibold">{ history.OpportunityCount }</dd>
+					</div>
+					<div class="terminal-stat rounded-lg border-0 p-3">
+						<dt class="text-muted-foreground">Stored trades</dt>
+						<dd class="mt-1 font-mono text-lg font-semibold">{ history.ExecutionCount }</dd>
+					</div>
+					<div class="terminal-stat rounded-lg border-0 p-3">
+						<dt class="text-muted-foreground">Accumulated P&L</dt>
+						<dd class="mt-1 font-mono text-lg font-semibold">{ history.TotalPnl }</dd>
+					</div>
+				</dl>
+
+				<div class="grid gap-3 2xl:grid-cols-2">
+					<div class="min-w-0">
+						<div class="mb-2 text-sm font-medium">Recent fills</div>
+						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+							@table.Table(table.Props{Class: "min-w-[760px] table-fixed"}) {
+								@table.Header() {
+									@table.Row() {
+										@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+											Time
+										}
+										@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+											Route
+										}
+										@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+											Market
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Size
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Net P&L
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Terms
+										}
+									}
+								}
+								@table.Body() {
+									if len(history.ExecutionRows) == 0 {
+										@table.Row() {
+											<td colspan="6" class="p-4 text-sm text-muted-foreground">
+												No fills have been persisted yet.
+											</td>
+										}
+									}
+									for _, row := range history.ExecutionRows {
+										@table.Row() {
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Executed }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="block truncate font-medium">{ row.Route }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Size }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.NetProfit }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="text-xs text-muted-foreground">{ row.TermsSource }</span>
+											}
+										}
+									}
+								}
+							}
+						</div>
+					</div>
+
+					<div class="min-w-0">
+						<div class="mb-2 text-sm font-medium">Recent detected opportunities</div>
+						<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+							@table.Table(table.Props{Class: "min-w-[820px] table-fixed"}) {
+								@table.Header() {
+									@table.Row() {
+										@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+											Time
+										}
+										@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+											Route
+										}
+										@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+											Market
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Size
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Net P&L
+										}
+										@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+											Decision
+										}
+										@table.Head(table.HeadProps{Class: "w-[160px]"}) {
+											Reason
+										}
+									}
+								}
+								@table.Body() {
+									if len(history.OpportunityRows) == 0 {
+										@table.Row() {
+											<td colspan="7" class="p-4 text-sm text-muted-foreground">
+												No opportunities have been persisted yet.
+											</td>
+										}
+									}
+									for _, row := range history.OpportunityRows {
+										@table.Row() {
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Observed }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="block truncate font-medium">{ row.Route }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Size }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap font-mono text-sm tabular-nums">{ row.ExpectedNet }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="whitespace-nowrap text-xs">{ row.Decision }</span>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<span class="block truncate font-mono text-xs text-muted-foreground">{ row.Reason }</span>
+											}
+										}
+									}
+								}
+							}
+						</div>
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
+templ TermsSourceCard(rows []TermsSourceRow) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.FileText(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
+			@card.Title() {
+				Terms source health
+			}
+			@card.Description() {
+				Fees, balances, and transfer inputs used by paper routes.
+			}
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[760px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[100px]"}) {
+								Market
+							}
+							@table.Head(table.HeadProps{Class: "w-[110px]"}) {
+								Source
+							}
+							@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+								Status
+							}
+							@table.Head(table.HeadProps{Class: "w-[150px]"}) {
+								Updated
+							}
+							@table.Head(table.HeadProps{Class: "w-[190px]"}) {
+								Message
+							}
+						}
+					}
+					@table.Body() {
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-medium">{ row.Exchange }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Market }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Source }
+									}
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap text-xs">{ row.Status }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs">{ row.Updated }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="block truncate text-xs text-muted-foreground">{ row.Message }</span>
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ BalanceCard(rows []BalanceRow) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex min-w-0 items-start gap-2">
+				<span class="terminal-panel-icon mt-0.5 grid size-7 shrink-0 place-items-center rounded-md">
+					@icon.WalletCards(icon.Props{Class: "size-4"})
+				</span>
+				<div class="min-w-0">
+			@card.Title() {
+				Wallets
+			}
+			@card.Description() {
+				Balances used to bound autonomous decisions.
+			}
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "px-4 pb-4 pt-0"}) {
+			<div class="terminal-table w-full max-w-full overflow-x-auto rounded-lg border-0" tabindex="0">
+				@table.Table(table.Props{Class: "min-w-[560px] table-fixed"}) {
+					@table.Header() {
+						@table.Row() {
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Exchange
+							}
+							@table.Head(table.HeadProps{Class: "w-[90px]"}) {
+								Asset
+							}
+							@table.Head(table.HeadProps{Class: "w-[170px]"}) {
+								Amount
+							}
+							@table.Head(table.HeadProps{Class: "w-[120px]"}) {
+								Source
+							}
+						}
+					}
+					@table.Body() {
+						for _, row := range rows {
+							@table.Row() {
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-medium">{ row.Exchange }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="font-mono text-xs">{ row.Asset }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									<span class="whitespace-nowrap font-mono text-xs tabular-nums">{ row.Amount }</span>
+								}
+								@table.Cell(table.CellProps{Class: "align-top"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+										{ row.Source }
+									}
+								}
+							}
+						}
+					}
+				}
+			</div>
+		}
+	}
+}

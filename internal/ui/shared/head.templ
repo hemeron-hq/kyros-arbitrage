@@ -1,0 +1,14 @@
+package shared
+
+import "github.com/templui/templui/components/tabs"
+
+templ Head(title string) {
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<title>{ title }</title>
+		<link rel="stylesheet" href="/assets/css/output.css"/>
+		<script type="module" src="/assets/js/datastar.js"></script>
+		@tabs.Script()
+	</head>
+}

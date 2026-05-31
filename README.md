@@ -61,9 +61,10 @@ task dev
 
 - `/` renders the SSR dashboard with feed status, net opportunities, paper wallets, terms-source health, execution-term details, and session P&L.
 - `/stream` opens a Datastar SSE stream with coalesced dashboard patches.
+- `/risk/mode` updates the persisted risk mode from the dashboard.
 - `/healthz` returns process and feed-health status.
 - `/api/history` returns persisted opportunity, simulated execution, and P&L history.
-- `/api/risk` returns the persisted risk mode, circuit status, reasons, and active thresholds.
+- `/api/metrics` returns feed and decision-loop speed evidence for diagnostics.
 - `/assets/` serves CSS and the self-hosted Datastar client.
 
 ## Package Layout
@@ -79,8 +80,8 @@ task dev
 - `internal/portfolio` defines portfolio contracts; `internal/portfolio/paper` owns simulated exchange balances, fills, and session P&L.
 - `internal/platform/config` owns strongly typed environment configuration.
 - `internal/platform/database` owns application database opening, goose migration execution, and generated query access.
-- `internal/server` owns HTTP routing, handlers, static assets, and Datastar SSE projection wiring.
-- `internal/view` owns server-rendered templ views and view models.
+- `internal/server` owns process-level HTTP routing, health/history diagnostics, and static assets.
+- `internal/ui` owns server-rendered templ views, dashboard route registration, Datastar SSE wiring, and dashboard view models split by UI domain.
 - `sql/` owns migrations, queries, and the sqlc config. `gen/db` contains sqlc-generated Go code and should not be edited by hand.
 
 ## Market Data Defaults

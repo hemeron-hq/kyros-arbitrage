@@ -24,10 +24,10 @@ func TestEvaluateSubtractsRebalanceCost(t *testing.T) {
 	if opportunity.Decision != DecisionExecute {
 		t.Fatalf("expected executable route, got %s/%s", opportunity.Decision, opportunity.ReasonCode)
 	}
-	if !opportunity.RebalanceCost.Equal(decimal.MustNew(251, 2)) {
-		t.Fatalf("expected 2.51 rebalance cost, got %s", opportunity.RebalanceCost)
+	if !opportunity.RebalanceCost.Equal(decimal.MustNew(801, 2)) {
+		t.Fatalf("expected 8.01 rebalance cost, got %s", opportunity.RebalanceCost)
 	}
-	if !opportunity.ExpectedNetProfit.Equal(decimal.MustNew(9815, 3)) {
+	if !opportunity.ExpectedNetProfit.Equal(decimal.MustNew(4315, 3)) {
 		t.Fatalf("expected net profit after rebalance, got %s", opportunity.ExpectedNetProfit)
 	}
 }
@@ -50,8 +50,46 @@ func TestEvaluateSkipsAuthenticatedTermsWithoutTransferFees(t *testing.T) {
 	}
 }
 
+func TestEvaluateKeepsUSDAndUSDTMarketsSeparate(t *testing.T) {
+	now := time.Now()
+	engine := NewEngine(terms.NewStore(now), paper.NewLedger(), nil)
+	snapshots := []exchange.OrderBookSnapshot{
+		testBook(exchange.Binance, exchange.Market{Base: "BTC", Quote: "USDT"}, now, "100", "101", 1),
+		testBook(exchange.Kraken, exchange.Market{Base: "BTC", Quote: "USDT"}, now, "103", "104", 1),
+		testBook(exchange.Coinbase, exchange.Market{Base: "BTC", Quote: "USD"}, now, "100", "101", 1),
+		testBook(exchange.Gemini, exchange.Market{Base: "BTC", Quote: "USD"}, now, "103", "104", 1),
+	}
+
+	engine.Evaluate(snapshots, now)
+	result := engine.Evaluate(snapshots, now.Add(time.Millisecond))
+	for _, opportunity := range result.Opportunities {
+		if opportunity.BuyExchange == "" || opportunity.SellExchange == "" {
+			continue
+		}
+		if opportunity.Market.Quote == "USDT" {
+			if opportunity.BuyExchange == exchange.Coinbase || opportunity.SellExchange == exchange.Coinbase ||
+				opportunity.BuyExchange == exchange.Gemini || opportunity.SellExchange == exchange.Gemini {
+				t.Fatalf("USDT route crossed into USD exchange: %+v", opportunity)
+			}
+		}
+		if opportunity.Market.Quote == "USD" {
+			if opportunity.BuyExchange == exchange.Binance || opportunity.SellExchange == exchange.Binance ||
+				opportunity.BuyExchange == exchange.Kraken || opportunity.SellExchange == exchange.Kraken {
+				t.Fatalf("USD route crossed into USDT exchange: %+v", opportunity)
+			}
+		}
+	}
+}
+
 func profitableSnapshots(now time.Time, ask string, bid string) []exchange.OrderBookSnapshot {
 	market := exchange.Market{Base: "BTC", Quote: "USDT"}
+	return []exchange.OrderBookSnapshot{
+		testBook(exchange.Binance, market, now, "99", ask, 1),
+		testBook(exchange.Kraken, market, now, bid, "151", 1),
+	}
+}
+
+func testBook(exchangeID exchange.ID, market exchange.Market, now time.Time, bid string, ask string, sequence int64) exchange.OrderBookSnapshot {
 	askLevel, err := exchange.NewPriceLevel(ask, "1")
 	if err != nil {
 		panic(err)
@@ -60,27 +98,15 @@ func profitableSnapshots(now time.Time, ask string, bid string) []exchange.Order
 	if err != nil {
 		panic(err)
 	}
-	return []exchange.OrderBookSnapshot{
-		{
-			Exchange:   exchange.Binance,
-			Market:     market,
-			Bids:       []exchange.PriceLevel{{Price: decimal.MustNew(99, 0), Quantity: decimal.MustNew(1, 0)}},
-			Asks:       []exchange.PriceLevel{askLevel},
-			ReceivedAt: now,
-			Sequence:   1,
-			Status:     exchange.StatusLive,
-			Transport:  exchange.TransportWebSocket,
-		},
-		{
-			Exchange:   exchange.Kraken,
-			Market:     market,
-			Bids:       []exchange.PriceLevel{bidLevel},
-			Asks:       []exchange.PriceLevel{{Price: decimal.MustNew(151, 0), Quantity: decimal.MustNew(1, 0)}},
-			ReceivedAt: now,
-			Sequence:   1,
-			Status:     exchange.StatusLive,
-			Transport:  exchange.TransportWebSocket,
-		},
+	return exchange.OrderBookSnapshot{
+		Exchange:   exchangeID,
+		Market:     market,
+		Bids:       []exchange.PriceLevel{bidLevel},
+		Asks:       []exchange.PriceLevel{askLevel},
+		ReceivedAt: now,
+		Sequence:   sequence,
+		Status:     exchange.StatusLive,
+		Transport:  exchange.TransportWebSocket,
 	}
 }
 

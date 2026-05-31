@@ -1,0 +1,34 @@
+package shared
+
+import (
+	"github.com/templui/templui/components/card"
+	"github.com/templui/templui/components/icon"
+)
+
+templ MetricStrip(metrics Metrics) {
+	<section id="metric-strip" class="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-6">
+		@MetricCard("Live feeds", metrics.LiveFeeds, "Backend market streams.", "radio")
+		@MetricCard("Best net P&L", metrics.BestNetPnl, metrics.BestNetState, "trending-up")
+		@MetricCard("Session P&L", metrics.SessionPnl, metrics.Executed + " fills", "wallet-cards")
+		@MetricCard("History P&L", metrics.HistoryTotalPnl, metrics.HistoryExecutionCount + " stored trades", "history")
+		@MetricCard("Rejected", metrics.Rejected, "Current decision pass.", "circle-alert")
+		@MetricCard("Stale/error feeds", metrics.StaleFeeds, "Fallback and reconnect state.", "wifi-off")
+	</section>
+}
+
+templ MetricCard(label string, value string, detail string, iconName string) {
+	@card.Card(card.Props{Class: "terminal-card min-w-0 border-0 bg-transparent shadow-none"}) {
+		@card.Content(card.ContentProps{Class: "p-4"}) {
+			<div class="min-w-0 space-y-1">
+				<div class="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+					<span class="terminal-mini-icon grid size-5 shrink-0 place-items-center rounded-md">
+						@icon.Icon(iconName)(icon.Props{Class: "size-3.5"})
+					</span>
+					<span>{ label }</span>
+				</div>
+				<div class="font-mono text-xl font-semibold tracking-normal text-foreground">{ value }</div>
+				<div class="break-words text-xs text-muted-foreground">{ detail }</div>
+			</div>
+		}
+	}
+}

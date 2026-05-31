@@ -8,12 +8,17 @@ import (
 )
 
 func TestFallbackSnapshotIncludesTransferFees(t *testing.T) {
-	snapshot := FallbackSnapshot(exchange.Binance, exchange.Market{Base: "BTC", Quote: "USDT"}, time.Now(), "test")
+	for _, binding := range exchange.DefaultBindings() {
+		snapshot := FallbackSnapshot(binding.Exchange, binding.Market, time.Now(), "test")
 
-	if !snapshot.TransferFee("BTC").IsPos() {
-		t.Fatal("expected fallback BTC transfer fee")
-	}
-	if !snapshot.TransferFee("USDT").IsPos() {
-		t.Fatal("expected fallback USDT transfer fee")
+		if !snapshot.TransferFee("BTC").IsPos() {
+			t.Fatalf("expected fallback BTC transfer fee for %s", binding.Exchange)
+		}
+		if !snapshot.TransferFee(binding.Market.Quote).IsPos() {
+			t.Fatalf("expected fallback %s transfer reserve for %s", binding.Market.Quote, binding.Exchange)
+		}
+		if snapshot.Fees.TakerRate.IsNeg() || snapshot.Constraints.MinBase.IsZero() {
+			t.Fatalf("expected usable fallback profile for %s", binding.Exchange)
+		}
 	}
 }

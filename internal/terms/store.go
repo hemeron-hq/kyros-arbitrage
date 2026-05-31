@@ -15,8 +15,9 @@ type Store struct {
 
 func NewStore(now time.Time) *Store {
 	store := &Store{snapshots: make(map[exchange.Key]Snapshot)}
-	store.Apply(FallbackSnapshot(exchange.Binance, defaultBTCUSDT, now, "missing Binance API credentials"))
-	store.Apply(FallbackSnapshot(exchange.Kraken, defaultBTCUSDT, now, "missing Kraken API credentials"))
+	for _, binding := range exchange.DefaultBindings() {
+		store.Apply(FallbackSnapshot(binding.Exchange, binding.Market, now, "public fallback terms"))
+	}
 	return store
 }
 

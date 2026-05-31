@@ -1,0 +1,160 @@
+package exchanges
+
+import (
+	"github.com/templui/templui/components/badge"
+	"github.com/templui/templui/components/card"
+	"github.com/templui/templui/components/icon"
+)
+
+templ Dashboard(connection Model) {
+	<div id="exchanges-dashboard" class="grid min-w-0 gap-3">
+		<div class="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
+			<div class="min-w-0">
+				<h2 class="text-lg font-semibold tracking-normal">Exchanges</h2>
+				<p class="max-w-2xl text-sm text-muted-foreground">
+					Venue credentials, market rules, balances, and transfer inputs currently used by the execution engine.
+				</p>
+			</div>
+			<div class="font-mono text-xs text-muted-foreground">{ connection.LastUpdated }</div>
+		</div>
+		if len(connection.ExchangeCards) == 0 {
+			@card.Card(card.Props{Class: "terminal-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+				@card.Content(card.ContentProps{Class: "p-4 text-sm text-muted-foreground"}) {
+					No exchange terms have been loaded yet.
+				}
+			}
+		}
+		<section class="grid min-w-0 gap-3 xl:grid-cols-2">
+			for _, venue := range connection.ExchangeCards {
+				@ExchangeCard(venue)
+			}
+		</section>
+	</div>
+}
+
+templ ExchangeCard(venue ExchangeCardView) {
+	@card.Card(card.Props{Class: "terminal-card exchange-card min-w-0 overflow-hidden border-0 bg-transparent shadow-none"}) {
+		@card.Header(card.HeaderProps{Class: "px-4 pt-4 pb-3"}) {
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				<div class="flex min-w-0 items-start gap-3">
+					<span class="terminal-panel-icon mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg">
+						@icon.Unplug(icon.Props{Class: "size-4"})
+					</span>
+					<div class="min-w-0">
+						<div class="flex flex-wrap items-center gap-2">
+							@card.Title() {
+								{ venue.Exchange }
+							}
+							@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+								{ venue.Market }
+							}
+							@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "terminal-badge"}) {
+								{ venue.Source }
+							}
+						</div>
+						@card.Description() {
+							<span class="block truncate">{ venue.Message }</span>
+						}
+					</div>
+				</div>
+				<div class="flex shrink-0 items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-muted-foreground">
+					<span class={ "size-2 rounded-full " + venue.StatusClass }></span>
+					<span class="font-medium text-foreground">{ venue.Status }</span>
+				</div>
+			</div>
+		}
+		@card.Content(card.ContentProps{Class: "grid gap-3 px-4 pb-4 pt-0"}) {
+			<dl class="grid gap-2 text-sm sm:grid-cols-3">
+				<div class="terminal-stat rounded-lg border-0 p-3">
+					<dt class="text-muted-foreground">Updated</dt>
+					<dd class="mt-1 truncate font-mono text-xs">{ venue.Updated }</dd>
+				</div>
+				<div class="terminal-stat rounded-lg border-0 p-3">
+					<dt class="text-muted-foreground">Expires</dt>
+					<dd class="mt-1 truncate font-mono text-xs">{ venue.Expires }</dd>
+				</div>
+				<div class="terminal-stat rounded-lg border-0 p-3">
+					<dt class="text-muted-foreground">Markets</dt>
+					<dd class="mt-1 font-mono text-xs">{ venue.Market }</dd>
+				</div>
+			</dl>
+
+			<div class="grid min-w-0 gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+				<div class="terminal-stat min-w-0 rounded-lg border-0 p-3">
+					<div class="mb-3 flex items-center gap-2 text-sm font-medium">
+						@icon.FileText(icon.Props{Class: "size-4 text-primary"})
+						Execution terms
+					</div>
+					<div class="grid gap-2">
+						for _, rule := range venue.Rules {
+							<div class="exchange-mini-panel min-w-0 rounded-md p-3">
+								<div class="mb-3 flex items-center justify-between gap-3">
+									<span class="font-mono text-xs text-muted-foreground">{ rule.Market }</span>
+									<span class="font-mono text-xs text-primary">{ rule.Source }</span>
+								</div>
+								<dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+									<div>
+										<dt class="text-muted-foreground">Maker</dt>
+										<dd class="mt-0.5 font-mono tabular-nums">{ rule.MakerFee }</dd>
+									</div>
+									<div>
+										<dt class="text-muted-foreground">Taker</dt>
+										<dd class="mt-0.5 font-mono tabular-nums">{ rule.TakerFee }</dd>
+									</div>
+									<div>
+										<dt class="text-muted-foreground">Min base</dt>
+										<dd class="mt-0.5 truncate font-mono tabular-nums">{ rule.MinBase }</dd>
+									</div>
+									<div>
+										<dt class="text-muted-foreground">Min notional</dt>
+										<dd class="mt-0.5 truncate font-mono tabular-nums">{ rule.MinNotional }</dd>
+									</div>
+									<div>
+										<dt class="text-muted-foreground">Step</dt>
+										<dd class="mt-0.5 truncate font-mono tabular-nums">{ rule.StepSize }</dd>
+									</div>
+									<div>
+										<dt class="text-muted-foreground">Tick</dt>
+										<dd class="mt-0.5 truncate font-mono tabular-nums">{ rule.TickSize }</dd>
+									</div>
+								</dl>
+							</div>
+						}
+					</div>
+				</div>
+
+				<div class="grid min-w-0 gap-3">
+					<div class="terminal-stat min-w-0 rounded-lg border-0 p-3">
+						<div class="mb-3 flex items-center gap-2 text-sm font-medium">
+							@icon.WalletCards(icon.Props{Class: "size-4 text-primary"})
+							Balances
+						</div>
+						<div class="grid gap-2">
+							for _, balance := range venue.Balances {
+								<div class="exchange-asset-row grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3 rounded-md px-3 py-2">
+									<span class="font-mono text-xs text-muted-foreground">{ balance.Asset }</span>
+									<span class="truncate text-right font-mono text-xs tabular-nums">{ balance.Amount }</span>
+								</div>
+							}
+						</div>
+					</div>
+
+					<div class="terminal-stat min-w-0 rounded-lg border-0 p-3">
+						<div class="mb-3 flex items-center gap-2 text-sm font-medium">
+							@icon.ArrowLeftRight(icon.Props{Class: "size-4 text-primary"})
+							Transfer fees
+						</div>
+						<div class="grid gap-2">
+							for _, transfer := range venue.Transfers {
+								<div class="exchange-asset-row grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3 rounded-md px-3 py-2">
+									<span class="font-mono text-xs text-muted-foreground">{ transfer.Asset }</span>
+									<span class="truncate text-right font-mono text-xs tabular-nums">{ transfer.Fee }</span>
+								</div>
+							}
+						</div>
+					</div>
+				</div>
+			</div>
+		}
+	}
+}

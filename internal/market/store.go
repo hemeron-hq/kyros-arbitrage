@@ -14,6 +14,11 @@ type Store struct {
 	snapshots   map[exchange.Key]exchange.OrderBookSnapshot
 	subscribers map[int]chan struct{}
 	nextSubID   int
+	observer    Observer
+}
+
+type Observer interface {
+	ObserveMarket(snapshot exchange.OrderBookSnapshot, now time.Time)
 }
 
 func NewStore(staleAfter time.Duration) *Store {
@@ -22,6 +27,12 @@ func NewStore(staleAfter time.Duration) *Store {
 		snapshots:   make(map[exchange.Key]exchange.OrderBookSnapshot),
 		subscribers: make(map[int]chan struct{}),
 	}
+}
+
+func (s *Store) SetObserver(observer Observer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.observer = observer
 }
 
 func (s *Store) Register(binding exchange.Binding) {
@@ -47,6 +58,9 @@ func (s *Store) Apply(snapshot exchange.OrderBookSnapshot) {
 	}
 
 	s.snapshots[snapshot.Key()] = snapshot
+	if s.observer != nil {
+		s.observer.ObserveMarket(snapshot.Clone(), time.Now())
+	}
 	s.notifyLocked()
 }
 

@@ -12,8 +12,16 @@ import (
 type ID string
 
 const (
-	Binance ID = "binance"
-	Kraken  ID = "kraken"
+	Binance  ID = "binance"
+	Kraken   ID = "kraken"
+	Coinbase ID = "coinbase"
+	OKX      ID = "okx"
+	Bybit    ID = "bybit"
+	Bitfinex ID = "bitfinex"
+	KuCoin   ID = "kucoin"
+	Gate     ID = "gate"
+	Bitstamp ID = "bitstamp"
+	Gemini   ID = "gemini"
 )
 
 type Provider interface {
@@ -201,6 +209,7 @@ func (s OrderBookSnapshot) BestAsk() (PriceLevel, bool) {
 
 func DefaultBindings() []Binding {
 	btcUSDT := Market{Base: "BTC", Quote: "USDT"}
+	btcUSD := Market{Base: "BTC", Quote: "USD"}
 	return []Binding{
 		{
 			Exchange:        Binance,
@@ -214,6 +223,62 @@ func DefaultBindings() []Binding {
 			Market:          btcUSDT,
 			WebSocketSymbol: "BTC/USDT",
 			RESTSymbol:      "XBTUSDT",
+			Enabled:         true,
+		},
+		{
+			Exchange:        OKX,
+			Market:          btcUSDT,
+			WebSocketSymbol: "BTC-USDT",
+			RESTSymbol:      "BTC-USDT",
+			Enabled:         true,
+		},
+		{
+			Exchange:        Bybit,
+			Market:          btcUSDT,
+			WebSocketSymbol: "BTCUSDT",
+			RESTSymbol:      "BTCUSDT",
+			Enabled:         true,
+		},
+		{
+			Exchange:        KuCoin,
+			Market:          btcUSDT,
+			WebSocketSymbol: "BTC-USDT",
+			RESTSymbol:      "BTC-USDT",
+			Enabled:         true,
+		},
+		{
+			Exchange:        Gate,
+			Market:          btcUSDT,
+			WebSocketSymbol: "BTC_USDT",
+			RESTSymbol:      "BTC_USDT",
+			Enabled:         true,
+		},
+		{
+			Exchange:        Coinbase,
+			Market:          btcUSD,
+			WebSocketSymbol: "BTC-USD",
+			RESTSymbol:      "BTC-USD",
+			Enabled:         true,
+		},
+		{
+			Exchange:        Bitfinex,
+			Market:          btcUSD,
+			WebSocketSymbol: "tBTCUSD",
+			RESTSymbol:      "tBTCUSD",
+			Enabled:         true,
+		},
+		{
+			Exchange:        Bitstamp,
+			Market:          btcUSD,
+			WebSocketSymbol: "btcusd",
+			RESTSymbol:      "btcusd",
+			Enabled:         true,
+		},
+		{
+			Exchange:        Gemini,
+			Market:          btcUSD,
+			WebSocketSymbol: "btcusd",
+			RESTSymbol:      "btcusd",
 			Enabled:         true,
 		},
 	}

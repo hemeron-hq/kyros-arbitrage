@@ -38,11 +38,34 @@ func TestDecisionLoopRecordsOnMarketEvent(t *testing.T) {
 	deadline := time.Now().Add(300 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		if historyCount(t, httpServer.Handler) > initial {
+			metrics := metricsSnapshot(t, httpServer.Handler)
+			if metrics.LastDecisionLatencyMS < 0 {
+				t.Fatalf("expected non-negative decision latency, got %d", metrics.LastDecisionLatencyMS)
+			}
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("expected market event to record history without waiting for old 500ms ticker")
+}
+
+func metricsSnapshot(t *testing.T, handler http.Handler) struct {
+	LastDecisionLatencyMS int64 `json:"lastDecisionLatencyMs"`
+} {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/metrics", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics status %d: %s", rec.Code, rec.Body.String())
+	}
+	var snapshot struct {
+		LastDecisionLatencyMS int64 `json:"lastDecisionLatencyMs"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	return snapshot
 }
 
 func historyCount(t *testing.T, handler http.Handler) int64 {
